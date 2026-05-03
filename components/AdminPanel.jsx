@@ -1352,11 +1352,23 @@ export default function AdminPanel({ user, onSignOut }) {
     GREEN: text.stableCases,
   };
 
+  const scrollToTable = () => {
+    setTimeout(() => {
+      const el = document.getElementById("patient-board-table");
+      if (el) {
+        // Adjust coordinate behavior. Since there's no native sticky header, 
+        // scrolling to 'start' works.
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 60);
+  };
+
   const clearFilters = useCallback(() => {
     setQuery("");
     setFilterCondition(null);
     setFilterStatus(null);
     setFilterLanguage(null);
+    scrollToTable();
   }, []);
 
   const handleToggleSupervision = useCallback((id) => {
@@ -1395,6 +1407,7 @@ export default function AdminPanel({ user, onSignOut }) {
     setFilterCondition(null);
     setFilterLanguage(null);
     setQuery("");
+    scrollToTable();
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -1872,20 +1885,30 @@ export default function AdminPanel({ user, onSignOut }) {
                 >
                   <div style={{ maxWidth: 860 }}>
                     {isMobile && (
-                      <Button
-                        icon={<Menu size={16} />}
-                        onClick={() => setMobileSidebarOpen(true)}
-                        style={{
-                          marginBottom: 16,
-                          borderRadius: 10,
-                          fontWeight: 700,
-                          color: "#0f766e",
-                          border: "1px solid #ccfbf1",
-                          background: "#f0fdfa",
-                        }}
-                      >
-                        Menu
-                      </Button>
+                      <>
+                        {/* Placeholder to prevent hero text from collapsing upward into the fixed button's original space */}
+                        <div style={{ height: 38, marginBottom: 16 }} />
+                        <Button
+                          icon={<Menu size={16} />}
+                          onClick={() => setMobileSidebarOpen(true)}
+                          style={{
+                            position: "fixed",
+                            top: 16,
+                            left: 16,
+                            zIndex: 1100,
+                            borderRadius: 10,
+                            fontWeight: 700,
+                            padding: "6px 14px",
+                            height: "auto",
+                            color: "#0f766e",
+                            border: "1px solid #ccfbf1",
+                            background: "#f0fdfa",
+                            boxShadow: "0 4px 12px rgba(15, 118, 110, 0.15)",
+                          }}
+                        >
+                          Menu
+                        </Button>
+                      </>
                     )}
                     <Text style={pageStyles.eyebrow}>{text.compactTitle}</Text>
                     <Title
@@ -2033,7 +2056,7 @@ export default function AdminPanel({ user, onSignOut }) {
                 </Col>
               </Row>
 
-              <Card bordered={false} style={pageStyles.tableCard} styles={{ body: { padding: 0 } }}>
+              <Card bordered={false} id="patient-board-table" style={pageStyles.tableCard} styles={{ body: { padding: 0 } }}>
                 <div
                   style={{
                     ...pageStyles.tableHeader,
