@@ -11,6 +11,7 @@ import {
   Empty,
   Grid,
   Input,
+  Modal,
   Row,
   Select,
   Space,
@@ -32,13 +33,16 @@ import {
   Eye,
   Filter,
   Heart,
+  History,
   Languages,
   LogOut,
+  Menu,
   RefreshCw,
   Search,
   ShieldCheck,
   Stethoscope,
   Users,
+  UserCheck,
   UserRound,
   Wind,
 } from "lucide-react";
@@ -138,6 +142,11 @@ const VALUE_TRANSLATIONS = {
   no: { en: "No", ru: "Нет", uz: "Yo'q" },
 };
 
+// ============================================================================
+// 1. GLOBAL STRINGS & I18N CONFIGURATION
+// Contains translations for English, Russian, and Uzbek, as well as lookup
+// tables for medical conditions, status colors, and language maps.
+// ============================================================================
 const UI_TEXT = {
   en: {
     dashboardName: "PediaScreen Admin",
@@ -253,6 +262,17 @@ const UI_TEXT = {
     fieldDizziness: "Dizziness",
     fieldVomiting: "Vomiting",
     securityNote: "Displayed content is sanitized and rendered as plain text.",
+    underSupervision: "Under Supervision",
+    markChecked: "Mark as Checked",
+    checkedWarningTitle: "Remove from board?",
+    checkedWarningBody: "This submission will be removed from the active board. A copy will be saved in the patient history. This action cannot be undone.",
+    cancel: "Cancel",
+    confirm: "Confirm & Remove",
+    patientHistory: "Patient History",
+    viewHistory: "View History",
+    checkedAt: "Checked at",
+    noHistory: "No checked submissions yet.",
+    supervisedBadge: "Under Supervision",
   },
   ru: {
     dashboardName: "PediaScreen Admin",
@@ -368,6 +388,17 @@ const UI_TEXT = {
     fieldDizziness: "Головокружение",
     fieldVomiting: "Рвота",
     securityNote: "Показываемый контент очищается и выводится только как обычный текст.",
+    underSupervision: "Под наблюдением",
+    markChecked: "Отметить как проверено",
+    checkedWarningTitle: "Убрать с доски?",
+    checkedWarningBody: "Эта заявка будет убрана с активной доски. Копия будет сохранена в истории пациента. Это действие нельзя отменить.",
+    cancel: "Отмена",
+    confirm: "Подтвердить и убрать",
+    patientHistory: "История пациентов",
+    viewHistory: "Просмотр истории",
+    checkedAt: "Проверено в",
+    noHistory: "Проверенных заявок пока нет.",
+    supervisedBadge: "Под наблюдением",
   },
   uz: {
     dashboardName: "PediaScreen Admin",
@@ -483,6 +514,17 @@ const UI_TEXT = {
     fieldDizziness: "Bosh aylanishi",
     fieldVomiting: "Qusish",
     securityNote: "Ko'rsatilayotgan kontent tozalanadi va faqat oddiy matn sifatida chiqariladi.",
+    underSupervision: "Nazorat ostida",
+    markChecked: "Tekshirildi deb belgilash",
+    checkedWarningTitle: "Doskadan olib tashlansinmi?",
+    checkedWarningBody: "Bu yuborish faol doskadan olib tashlanadi. Nusxasi bemor tarixida saqlanadi. Bu amalni bekor qilib bo'lmaydi.",
+    cancel: "Bekor qilish",
+    confirm: "Tasdiqlash va olib tashlash",
+    patientHistory: "Bemor tarixi",
+    viewHistory: "Tarixni ko'rish",
+    checkedAt: "Tekshirilgan vaqt",
+    noHistory: "Hozircha tekshirilgan yuborishlar yo'q.",
+    supervisedBadge: "Nazorat ostida",
   },
 };
 
@@ -715,6 +757,12 @@ const matchesSearch = (record, query) => {
   return haystack.includes(query.toLowerCase());
 };
 
+// ============================================================================
+// 3. UI HELPER COMPONENTS
+// Tiny, reusable components to display styled badges for system parameters
+// e.g. "ConditionTag", "StatusBadge"
+// ============================================================================
+
 const ConditionTag = ({ condition }) => {
   const config = CONDITION_CONFIG[condition] || {
     label: condition || "Unknown",
@@ -805,6 +853,11 @@ const StatCard = ({ title, value, icon, accent, helper, active, onClick }) => (
   </Card>
 );
 
+// ============================================================================
+// 4. DETAIL DRAWER (MAIN ACTION CARDS & PATIENT INFO)
+// The right-side popout drawer containing full patient request details, 
+// triage advice, medications, and the action buttons (Supervision & Checked).
+// ============================================================================
 const DetailDrawer = ({
   open,
   onClose,
@@ -813,6 +866,9 @@ const DetailDrawer = ({
   statusLabels,
   locale,
   isMobile,
+  supervisedIds,
+  onToggleSupervision,
+  onMarkChecked,
 }) => {
   if (!record) return null;
 
@@ -820,6 +876,7 @@ const DetailDrawer = ({
   const statusConfig = STATUS_CONFIG[status] || {};
   const answers = record.user_answers || {};
   const translatedStatusLabel = statusLabels?.[status] || text.unknown;
+  const isSupervised = supervisedIds?.has(record.id);
 
   return (
     <Drawer
@@ -852,6 +909,7 @@ const DetailDrawer = ({
       }}
     >
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        {/* Meta tags: date, condition, language, status */}
         <Card bordered={false} style={{ borderRadius: 18 }}>
           <Space wrap size={[10, 10]}>
             <Tag style={metaTagStyle}>
@@ -864,9 +922,23 @@ const DetailDrawer = ({
               {RECORD_LANGUAGE_LABELS[record.language] || record.language || text.unknown}
             </Tag>
             <StatusBadge status={status} label={translatedStatusLabel} />
+            {isSupervised && (
+              <Tag
+                style={{
+                  ...metaTagStyle,
+                  background: "#fffbeb",
+                  border: "1px solid #fde68a",
+                  color: "#92400e",
+                }}
+              >
+                <UserCheck size={13} />
+                {text.supervisedBadge}
+              </Tag>
+            )}
           </Space>
         </Card>
 
+        {/* Assessment summary */}
         <Card bordered={false} style={{ borderRadius: 18 }}>
           <Space direction="vertical" size={14} style={{ width: "100%" }}>
             <Text strong style={sectionTitleStyle}>
@@ -894,6 +966,7 @@ const DetailDrawer = ({
           </Space>
         </Card>
 
+        {/* Patient responses */}
         <Card bordered={false} style={{ borderRadius: 18 }}>
           <Space direction="vertical" size={14} style={{ width: "100%" }}>
             <Text strong style={sectionTitleStyle}>
@@ -933,11 +1006,68 @@ const DetailDrawer = ({
             <Text style={{ color: "#94a3b8", fontSize: 12 }}>{text.securityNote}</Text>
           </Space>
         </Card>
+
+        {/* Action buttons */}
+        <Card
+          bordered={false}
+          style={{
+            borderRadius: 18,
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+          }}
+        >
+          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+            <Text strong style={sectionTitleStyle}>Actions</Text>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                gap: 10,
+              }}
+            >
+              <Button
+                icon={<UserCheck size={15} />}
+                onClick={() => onToggleSupervision?.(record.id)}
+                style={{
+                  borderRadius: 12,
+                  height: 44,
+                  fontWeight: 700,
+                  background: isSupervised ? "#fffbeb" : "#fff",
+                  borderColor: isSupervised ? "#fde68a" : "#e2e8f0",
+                  color: isSupervised ? "#92400e" : "#475569",
+                  boxShadow: isSupervised ? "0 4px 12px rgba(217,119,6,0.14)" : "none",
+                }}
+              >
+                {text.underSupervision}
+              </Button>
+              <Button
+                icon={<CheckCircle size={15} />}
+                onClick={() => onMarkChecked?.(record)}
+                style={{
+                  borderRadius: 12,
+                  height: 44,
+                  fontWeight: 700,
+                  background: "linear-gradient(135deg, #15803d, #4ade80)",
+                  borderColor: "transparent",
+                  color: "#fff",
+                  boxShadow: "0 4px 16px rgba(21,128,61,0.22)",
+                }}
+              >
+                {text.markChecked}
+              </Button>
+            </div>
+          </Space>
+        </Card>
       </Space>
     </Drawer>
   );
 };
 
+// ============================================================================
+// 5. NURSE DIRECTORY DRAWER (STAFF LIST)
+// Shows the active pediatricians/nurses available in the medical system.
+// Accessible from the header title click.
+// ============================================================================
 const NurseDirectoryDrawer = ({
   open,
   onClose,
@@ -1081,6 +1211,113 @@ const NurseProfileDrawer = ({ open, onClose, nurse, text, isMobile }) => {
   );
 };
 
+// ============================================================================
+// 7. HISTORY DRAWER
+// Shows the log of patients who have been marked as "Checked" and removed
+// from the main active dashboard board.
+// ============================================================================
+const HistoryDrawer = ({ open, onClose, history, text, statusLabels, locale, isMobile }) => (
+  <Drawer
+    title={
+      <Space size={10}>
+        <History size={16} color="#0f766e" />
+        <Text strong style={{ fontSize: 16, color: "#0f172a" }}>
+          {text.patientHistory}
+        </Text>
+        {history.length > 0 && (
+          <Tag
+            style={{
+              borderRadius: 999,
+              background: "#ecfeff",
+              border: "1px solid #a5f3fc",
+              color: "#0f766e",
+              fontWeight: 700,
+              fontSize: 11,
+            }}
+          >
+            {history.length}
+          </Tag>
+        )}
+      </Space>
+    }
+    placement="right"
+    width={isMobile ? "100%" : 520}
+    open={open}
+    onClose={onClose}
+    styles={{
+      body: { padding: isMobile ? 12 : 20, background: "#f8fafc" },
+      header: { borderBottom: "1px solid #e2e8f0" },
+    }}
+  >
+    {history.length === 0 ? (
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={text.noHistory} />
+    ) : (
+      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+        {history.map((entry) => {
+          const status = entry.result_data?.color;
+          const statusConfig = STATUS_CONFIG[status] || {};
+          return (
+            <Card
+              key={`${entry.id}-${entry._checkedAt}`}
+              bordered={false}
+              style={{
+                borderRadius: 16,
+                border: "1px solid #e2e8f0",
+                background: "#fff",
+              }}
+              styles={{ body: { padding: 14 } }}
+            >
+              <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <Text strong style={{ color: "#0f172a", fontSize: 14 }}>
+                      {derivePersonName(entry, text.unknownPerson)}
+                    </Text>
+                    <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>
+                      <Clock3 size={11} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />
+                      {text.checkedAt}: {formatDate(entry._checkedAt, locale)}
+                    </div>
+                  </div>
+                  <StatusBadge status={status} label={statusLabels?.[status] || text.unknown} />
+                </div>
+
+                <Space wrap size={[8, 8]}>
+                  <ConditionTag condition={entry.condition_key} />
+                  <Tag style={metaTagStyle}>
+                    <Languages size={11} />
+                    {RECORD_LANGUAGE_LABELS[entry.language] || entry.language || text.unknown}
+                  </Tag>
+                </Space>
+
+                {entry.result_data?.advice && (
+                  <div
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      background: statusConfig.bg || "#f8fafc",
+                      border: `1px solid ${statusConfig.border || "#e2e8f0"}`,
+                      fontSize: 13,
+                      color: "#334155",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {entry.result_data.advice}
+                  </div>
+                )}
+              </Space>
+            </Card>
+          );
+        })}
+      </Space>
+    )}
+  </Drawer>
+);
+
+// ============================================================================
+// 8. MAIN PAGE COMPONENT: <AdminPanel />
+// The layout, table logic, state management (filtering, fetching Supabase), 
+// and rendering of all the nested drawers and modals.
+// ============================================================================
 export default function AdminPanel({ user, onSignOut }) {
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
@@ -1101,6 +1338,12 @@ export default function AdminPanel({ user, onSignOut }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [api, contextHolder] = notification.useNotification();
   const lastCriticalAlertCount = useRef(0);
+  // New: supervision & history & mobile sidebar state
+  const [supervisedIds, setSupervisedIds] = useState(() => new Set());
+  const [checkedHistory, setCheckedHistory] = useState([]);
+  const [confirmingRecord, setConfirmingRecord] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const text = UI_TEXT[uiLanguage];
   const statusLabels = {
@@ -1115,6 +1358,37 @@ export default function AdminPanel({ user, onSignOut }) {
     setFilterStatus(null);
     setFilterLanguage(null);
   }, []);
+
+  const handleToggleSupervision = useCallback((id) => {
+    setSupervisedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleMarkChecked = useCallback((record) => {
+    setConfirmingRecord(record);
+  }, []);
+
+  const handleConfirmChecked = useCallback(() => {
+    if (!confirmingRecord) return;
+    const entryWithTimestamp = { ...confirmingRecord, _checkedAt: new Date().toISOString() };
+    setCheckedHistory((prev) => [entryWithTimestamp, ...prev]);
+    setData((prev) => prev.filter((r) => r.id !== confirmingRecord.id));
+    setSupervisedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(confirmingRecord.id);
+      return next;
+    });
+    setConfirmingRecord(null);
+    setDrawerOpen(false);
+    setSelectedRecord(null);
+  }, [confirmingRecord]);
 
   const applyStatusFilter = useCallback((status) => {
     setFilterStatus(status);
@@ -1223,12 +1497,12 @@ export default function AdminPanel({ user, onSignOut }) {
   ]);
 
   const columns = [
-    {
+    // 1. Submitted Time (Desktop Only - integrated into Name on Mobile)
+    !isMobile ? {
       title: text.submitted,
       dataIndex: "created_at",
       key: "created_at",
       width: 170,
-      responsive: ["xs"],
       render: (value) => (
         <Space direction="vertical" size={0}>
           <Text style={{ fontWeight: 700, color: "#0f172a", fontSize: 13 }}>
@@ -1236,46 +1510,51 @@ export default function AdminPanel({ user, onSignOut }) {
           </Text>
         </Space>
       ),
-    },
+    } : null,
+    // 2. Full Name
     {
-      // Surface patient name in the primary grid so clinicians do not need to
-      // open each row just to identify who the submission belongs to.
       title: text.fieldFullName,
       key: "patient_name",
-      width: 180,
-      responsive: ["xs"],
+      width: isMobile ? undefined : 180,
       render: (_, record) => (
-        <Text strong style={{ color: "#0f172a" }}>
-          {derivePersonName(record, text.unknownPerson)}
-        </Text>
+        <Space direction="vertical" size={isMobile ? 2 : 0}>
+          <Text strong style={{ color: "#0f172a", display: "block" }}>
+            {derivePersonName(record, text.unknownPerson)}
+          </Text>
+          {isMobile && (
+            <Text type="secondary" style={{ fontSize: 11, fontWeight: 500 }}>
+              {formatDate(record.created_at, uiLanguage)}
+            </Text>
+          )}
+        </Space>
       ),
     },
-    {
+    // 3. Condition Badge (Desktop/Tablet Only)
+    !isMobile ? {
       title: text.condition,
       dataIndex: "condition_key",
       key: "condition_key",
       width: 160,
-      responsive: ["md"],
       render: (value) => <ConditionTag condition={value} />,
-    },
-    {
+    } : null,
+    // 4. Language (Desktop/Tablet Only)
+    !isMobile && !isTablet ? {
       title: text.language,
       dataIndex: "language",
       key: "language",
       width: 110,
-      responsive: ["lg"],
       render: (value) => (
         <Tag style={metaTagStyle}>
           <Languages size={12} />
           {RECORD_LANGUAGE_LABELS[value] || value || text.unknown}
         </Tag>
       ),
-    },
+    } : null,
+    // 5. Status Badge
     {
       title: text.status,
       key: "status",
       width: 150,
-      responsive: ["xs"],
       render: (_, record) => (
         <StatusBadge
           status={record.result_data?.color}
@@ -1283,10 +1562,10 @@ export default function AdminPanel({ user, onSignOut }) {
         />
       ),
     },
-    {
+    // 6. Advice Snippet (Large Desktop Only)
+    !isMobile && !isTablet ? {
       title: text.advice,
       key: "advice",
-      responsive: ["xl"],
       render: (_, record) => (
         <Tooltip title={record.result_data?.advice || text.noAdvice}>
           <Text
@@ -1302,70 +1581,39 @@ export default function AdminPanel({ user, onSignOut }) {
           </Text>
         </Tooltip>
       ),
-    },
+    } : null,
+    // 7. View Actions
     {
       title: "",
       key: "actions",
-      width: 92,
+      width: isMobile ? 54 : 92,
       align: "right",
-      responsive: ["xs"],
       render: (_, record) => (
         <Button
           type="text"
-          icon={<Eye size={15} />}
-          style={{ color: "#0f766e", fontWeight: 700 }}
+          icon={<Eye size={17} />}
+          style={{ color: "#0f766e", fontWeight: 700, padding: isMobile ? "4px 8px" : undefined }}
           onClick={(event) => {
             event.stopPropagation();
             setSelectedRecord(record);
             setDrawerOpen(true);
           }}
         >
-          {text.view}
+          {!isMobile && text.view}
         </Button>
       ),
     },
-  ];
+  ].filter(Boolean);
 
   const activeFilterLabel = filterStatus
     ? statusLabels[filterStatus]
     : text.allSubmissions;
 
-  // Keep mobile usable by showing only the highest-value columns first.
-  const tableScrollX = isMobile ? 560 : 980;
+  // Keep mobile usable without aggressive horizontal scroll by collapsing columns
+  const tableScrollX = isMobile ? undefined : 980;
 
-  return (
-    <>
-      {contextHolder}
-
-      <div style={pageStyles.page}>
-        <div style={pageStyles.gradient} />
-        <div style={pageStyles.grid} />
-
-        <div
-          style={{
-            ...pageStyles.container,
-            width: isMobile ? "calc(100% - 16px)" : pageStyles.container.width,
-            padding: isMobile ? "12px 0 20px" : "22px 0 28px",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "320px minmax(0, 1fr)",
-              gap: 18,
-              alignItems: "start",
-            }}
-          >
-            <Card
-              bordered={false}
-              style={{
-                ...pageStyles.sidebarCard,
-                position: isMobile ? "relative" : "sticky",
-                top: isMobile ? "auto" : 18,
-              }}
-              styles={{ body: { padding: 18 } }}
-            >
-              <Space direction="vertical" size={18} style={{ width: "100%" }}>
+  const renderSidebarContent = () => (
+    <Space direction="vertical" size={18} style={{ width: "100%" }}>
                 <div>
                   <Space size={12} align="start">
                     <div style={pageStyles.sidebarIcon}>
@@ -1378,9 +1626,6 @@ export default function AdminPanel({ user, onSignOut }) {
                       </Title>
                     </div>
                   </Space>
-                  <Text style={{ color: "#475569", lineHeight: 1.7 }}>
-                    {text.sidebarText}
-                  </Text>
                 </div>
 
                 <div style={sidebarSectionStyle}>
@@ -1479,7 +1724,7 @@ export default function AdminPanel({ user, onSignOut }) {
                     style={{
                       display: "grid",
                       gridTemplateColumns: isMobile
-                        ? "repeat(2, minmax(0, 1fr))"
+                        ? "1fr"
                         : "repeat(3, minmax(0, 1fr))",
                       gap: 8,
                     }}
@@ -1506,6 +1751,37 @@ export default function AdminPanel({ user, onSignOut }) {
                 <div style={sidebarSectionStyle}>
                   <Space size={10} direction="vertical" style={{ width: "100%" }}>
                     <Button
+                      icon={<History size={14} />}
+                      onClick={() => setHistoryOpen(true)}
+                      style={{
+                        borderRadius: 12,
+                        height: 42,
+                        fontWeight: 700,
+                        width: "100%",
+                        background: checkedHistory.length > 0 ? "#ecfeff" : "#fff",
+                        borderColor: checkedHistory.length > 0 ? "#a5f3fc" : "#e2e8f0",
+                        color: checkedHistory.length > 0 ? "#0f766e" : "#64748b",
+                      }}
+                    >
+                      {text.viewHistory}
+                      {checkedHistory.length > 0 && (
+                        <Tag
+                          style={{
+                            marginLeft: 6,
+                            borderRadius: 999,
+                            background: "#0f766e",
+                            border: "none",
+                            color: "#fff",
+                            fontWeight: 700,
+                            fontSize: 11,
+                            padding: "0 7px",
+                          }}
+                        >
+                          {checkedHistory.length}
+                        </Tag>
+                      )}
+                    </Button>
+                    <Button
                       type="primary"
                       icon={<RefreshCw size={14} />}
                       onClick={fetchData}
@@ -1523,8 +1799,61 @@ export default function AdminPanel({ user, onSignOut }) {
                     </Button>
                   </Space>
                 </div>
-              </Space>
-            </Card>
+    </Space>
+  );
+
+  return (
+    <>
+      {contextHolder}
+
+      <Drawer
+        title={text.sidebarTitle}
+        placement="left"
+        onClose={() => setMobileSidebarOpen(false)}
+        open={mobileSidebarOpen}
+        width={320}
+        styles={{ 
+          body: { padding: 18, background: "#f8fafc" },
+          header: { borderBottom: "1px solid #e2e8f0" } 
+        }}
+      >
+        {renderSidebarContent()}
+      </Drawer>
+
+      <div style={pageStyles.page}>
+        <div style={pageStyles.gradient} />
+        <div style={pageStyles.grid} />
+
+        <div
+          style={{
+            ...pageStyles.container,
+            width: isMobile ? "calc(100% - 16px)" : pageStyles.container.width,
+            padding: isMobile ? "12px 0 20px" : "22px 0 28px",
+          }}
+        >
+          <div
+            style={{
+              // Use block on mobile so main content is full screen width,
+              // and standard 2-col wrapper on desktop.
+              display: isMobile ? "block" : "grid",
+              gridTemplateColumns: isMobile ? undefined : "320px minmax(0, 1fr)",
+              gap: 18,
+              alignItems: "start",
+            }}
+          >
+            {!isMobile && (
+              <Card
+                bordered={false}
+                style={{
+                  ...pageStyles.sidebarCard,
+                  position: "sticky",
+                  top: 18,
+                }}
+                styles={{ body: { padding: 18 } }}
+              >
+                {renderSidebarContent()}
+              </Card>
+            )}
 
             <div>
               <Card
@@ -1542,6 +1871,22 @@ export default function AdminPanel({ user, onSignOut }) {
                   }}
                 >
                   <div style={{ maxWidth: 860 }}>
+                    {isMobile && (
+                      <Button
+                        icon={<Menu size={16} />}
+                        onClick={() => setMobileSidebarOpen(true)}
+                        style={{
+                          marginBottom: 16,
+                          borderRadius: 10,
+                          fontWeight: 700,
+                          color: "#0f766e",
+                          border: "1px solid #ccfbf1",
+                          background: "#f0fdfa",
+                        }}
+                      >
+                        Menu
+                      </Button>
+                    )}
                     <Text style={pageStyles.eyebrow}>{text.compactTitle}</Text>
                     <Title
                       level={3}
@@ -1642,7 +1987,7 @@ export default function AdminPanel({ user, onSignOut }) {
               )}
 
               <Row gutter={[16, 16]} style={{ marginTop: 16, marginBottom: 16 }}>
-                <Col xs={24} sm={12} xl={6}>
+                <Col xs={12} sm={12} xl={6}>
                   <StatCard
                     title={text.totalSubmissions}
                     value={stats.total}
@@ -1653,7 +1998,7 @@ export default function AdminPanel({ user, onSignOut }) {
                     onClick={clearFilters}
                   />
                 </Col>
-                <Col xs={24} sm={12} xl={6}>
+                <Col xs={12} sm={12} xl={6}>
                   <StatCard
                     title={text.criticalCases}
                     value={stats.red}
@@ -1664,7 +2009,7 @@ export default function AdminPanel({ user, onSignOut }) {
                     onClick={() => applyStatusFilter("RED")}
                   />
                 </Col>
-                <Col xs={24} sm={12} xl={6}>
+                <Col xs={12} sm={12} xl={6}>
                   <StatCard
                     title={text.attentionCases}
                     value={stats.yellow}
@@ -1675,7 +2020,7 @@ export default function AdminPanel({ user, onSignOut }) {
                     onClick={() => applyStatusFilter("YELLOW")}
                   />
                 </Col>
-                <Col xs={24} sm={12} xl={6}>
+                <Col xs={12} sm={12} xl={6}>
                   <StatCard
                     title={text.stableCases}
                     value={stats.green}
@@ -1725,7 +2070,7 @@ export default function AdminPanel({ user, onSignOut }) {
                     style={{
                       display: "grid",
                       gridTemplateColumns: isMobile
-                        ? "1fr"
+                        ? "repeat(3, 1fr)"
                         : isTablet
                           ? "repeat(2, minmax(160px, 1fr))"
                           : "minmax(240px, 280px) repeat(4, minmax(120px, 150px))",
@@ -1739,7 +2084,11 @@ export default function AdminPanel({ user, onSignOut }) {
                       onChange={(event) => setQuery(sanitizeText(event.target.value, 80))}
                       placeholder={text.searchPlaceholder}
                       prefix={<Search size={14} />}
-                      style={{ width: "100%", borderRadius: 12 }}
+                      style={{ 
+                        width: "100%", 
+                        borderRadius: 12, 
+                        gridColumn: isMobile ? "1 / -1" : undefined 
+                      }}
                     />
                     <Select
                       allowClear
@@ -1783,7 +2132,14 @@ export default function AdminPanel({ user, onSignOut }) {
                         </Select.Option>
                       ))}
                     </Select>
-                    <Button onClick={clearFilters} style={{ borderRadius: 12, width: "100%" }}>
+                    <Button 
+                      onClick={clearFilters} 
+                      style={{ 
+                        borderRadius: 12, 
+                        width: "100%", 
+                        gridColumn: isMobile ? "1 / -1" : undefined 
+                      }}
+                    >
                       {text.clear}
                     </Button>
                   </div>
@@ -1823,7 +2179,11 @@ export default function AdminPanel({ user, onSignOut }) {
                         },
                         style: { cursor: "pointer" },
                       })}
-                      rowClassName={() => "admin-table-row"}
+                      rowClassName={(record) =>
+                        supervisedIds.has(record.id)
+                          ? "admin-table-row admin-table-row-supervised"
+                          : "admin-table-row"
+                      }
                     />
                   </Spin>
                 </div>
@@ -1841,6 +2201,9 @@ export default function AdminPanel({ user, onSignOut }) {
         statusLabels={statusLabels}
         locale={uiLanguage}
         isMobile={isMobile}
+        supervisedIds={supervisedIds}
+        onToggleSupervision={handleToggleSupervision}
+        onMarkChecked={handleMarkChecked}
       />
 
       <NurseDirectoryDrawer
@@ -1864,9 +2227,99 @@ export default function AdminPanel({ user, onSignOut }) {
         isMobile={isMobile}
       />
 
+      <HistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        history={checkedHistory}
+        text={text}
+        statusLabels={statusLabels}
+        locale={uiLanguage}
+        isMobile={isMobile}
+      />
+
+      {/* Confirmation modal for "Mark as Checked" / remove from board */}
+      <Modal
+        open={confirmingRecord !== null}
+        onCancel={() => setConfirmingRecord(null)}
+        onOk={handleConfirmChecked}
+        okText={text.confirm}
+        cancelText={text.cancel}
+        okButtonProps={{
+          danger: true,
+          style: { borderRadius: 12, fontWeight: 700, height: 40 },
+        }}
+        cancelButtonProps={{
+          style: { borderRadius: 12, fontWeight: 700, height: 40 },
+        }}
+        title={
+          <Space size={8}>
+            <CheckCircle size={18} color="#15803d" />
+            <span style={{ color: "#0f172a", fontWeight: 700 }}>{text.checkedWarningTitle}</span>
+          </Space>
+        }
+        style={{ borderRadius: 20 }}
+        styles={{ content: { borderRadius: 20 } }}
+        centered
+        width={isMobile ? "92vw" : 440}
+      >
+        {confirmingRecord && (
+          <div style={{ paddingTop: 6 }}>
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: 14,
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                marginBottom: 14,
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background:
+                    STATUS_CONFIG[confirmingRecord.result_data?.color]?.bg || "#f1f5f9",
+                  border: `1px solid ${STATUS_CONFIG[confirmingRecord.result_data?.color]?.border || "#e2e8f0"}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: STATUS_CONFIG[confirmingRecord.result_data?.color]?.color || "#64748b",
+                }}
+              >
+                {STATUS_CONFIG[confirmingRecord.result_data?.color]?.icon}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>
+                  {derivePersonName(confirmingRecord, text.unknownPerson)}
+                </div>
+                <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                  <ConditionTag condition={confirmingRecord.condition_key} />
+                  <StatusBadge
+                    status={confirmingRecord.result_data?.color}
+                    label={statusLabels[confirmingRecord.result_data?.color] || text.unknown}
+                  />
+                </div>
+              </div>
+            </div>
+            <Text style={{ color: "#475569", lineHeight: 1.7 }}>{text.checkedWarningBody}</Text>
+          </div>
+        )}
+      </Modal>
+
       <style>{`
         .admin-table-row:hover > td {
           background: #f0fdfa !important;
+        }
+        .admin-table-row-supervised > td {
+          border-left: 3px solid #fde68a !important;
+          background: #fffdf0 !important;
+        }
+        .admin-table-row-supervised:hover > td {
+          background: #fffbeb !important;
         }
         .ant-table-thead > tr > th {
           background: #f8fafc !important;

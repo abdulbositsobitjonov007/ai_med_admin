@@ -6,6 +6,7 @@ import {
   Card,
   ConfigProvider,
   Form,
+  Grid,
   Input,
   Space,
   Spin,
@@ -101,7 +102,15 @@ function SetupScreen() {
 // The email and password entered here are sent to Supabase Auth.
 // That means the correct credentials are created and managed in your Supabase project,
 // not in this React code.
+// ============================================================================
+// 2. AUTHENTICATION UI (LOGIN SCREEN)
+// Renders the login form for unauthenticated users. Features email/password
+// login, password reset functionality, and an optional visual email allowlist.
+// Handles its own responsive layout using Grid.useBreakpoint().
+// ============================================================================
 function AuthScreen() {
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.md;
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -177,44 +186,73 @@ function AuthScreen() {
       <div style={styles.authGlowOne} />
       <div style={styles.authGlowTwo} />
 
-      <div style={styles.authGrid}>
-        <div style={styles.authCopy}>
-          <Space direction="vertical" size={16}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: isMobile ? 32 : 64,
+          padding: isMobile ? "20px 16px" : "40px 32px",
+          width: "100%",
+          maxWidth: 1120,
+          margin: "0 auto",
+        }}
+      >
+        <div style={{ flex: isMobile ? "none" : 1, width: isMobile ? "100%" : "auto", maxWidth: isMobile ? "100%" : 540 }}>
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <Space size={12}>
               <div style={styles.brandIconLarge}>
                 <ShieldCheck size={26} color="#fff" />
               </div>
               <div>
                 <Text style={styles.eyebrow}>Protected Access</Text>
-                <Title level={1} style={styles.heroTitle}>
-                  PediaScreen admin, built for calm daily use.
+                <Title 
+                  level={1} 
+                  style={{
+                    ...styles.heroTitle,
+                    fontSize: isMobile ? 34 : 46,
+                    letterSpacing: isMobile ? "-1.2px" : "-1.6px",
+                  }}
+                >
+                  {isMobile 
+                    ? "PediaScreen admin" 
+                    : "PediaScreen admin, built for calm daily use."}
                 </Title>
               </div>
             </Space>
 
-            <Text style={styles.heroText}>
-              Review incoming screenings, triage urgent cases faster, and keep
-              your admin workflow clean and secure with Supabase login.
-            </Text>
+            {!isMobile && (
+              <>
+                <Text style={styles.heroText}>
+                  Review incoming screenings, triage urgent cases faster, and keep
+                  your admin workflow clean and secure with Supabase login.
+                </Text>
 
-            <Space wrap size={[10, 10]}>
-              <Tag style={styles.heroTag}>
-                <ShieldCheck size={14} />
-                Session-based auth
-              </Tag>
-              <Tag style={styles.heroTag}>
-                <KeyRound size={14} />
-                Password reset support
-              </Tag>
-              <Tag style={styles.heroTag}>
-                <Mail size={14} />
-                Optional email allowlist
-              </Tag>
-            </Space>
+                <Space wrap size={[10, 10]}>
+                  <Tag style={styles.heroTag}>
+                    <ShieldCheck size={14} />
+                    Session-based auth
+                  </Tag>
+                  <Tag style={styles.heroTag}>
+                    <KeyRound size={14} />
+                    Password reset support
+                  </Tag>
+                  <Tag style={styles.heroTag}>
+                    <Mail size={14} />
+                    Optional email allowlist
+                  </Tag>
+                </Space>
+              </>
+            )}
           </Space>
         </div>
 
-        <Card bordered={false} style={styles.authCard} styles={{ body: { padding: 32 } }}>
+        <Card
+          bordered={false}
+          style={{ ...styles.authCard, width: isMobile ? "100%" : 440, maxWidth: "100%" }}
+          styles={{ body: { padding: isMobile ? 24 : 32 } }}
+        >
           <Space direction="vertical" size={20} style={{ width: "100%" }}>
             <div>
               <Text style={styles.eyebrow}>Admin Sign In</Text>
@@ -309,6 +347,11 @@ function AuthScreen() {
 // 2. loading spinner
 // 3. login screen
 // 4. authenticated admin dashboard
+// ============================================================================
+// 3. AUTH GATEKEEPER COMPONENT
+// Tracks the user's session state via Supabase realtime auth listener.
+// Conditionally renders either the authenticated AdminPanel or the AuthScreen.
+// ============================================================================
 function AppContent() {
   const [session, setSession] = useState(null);
   const [booting, setBooting] = useState(isSupabaseConfigured);
@@ -415,6 +458,11 @@ function AppContent() {
 // - sets Ant Design theme colors
 // - provides Ant Design's App context for notifications
 // - renders the auth-gated app content
+// ============================================================================
+// 4. ROOT APP COMPONENT
+// The main entrypoint, responsible for applying global UI theme settings,
+// like the primary color profile, and wrapping the app in ConfigProvider.
+// ============================================================================
 export default function App() {
   return (
     <ConfigProvider
@@ -439,7 +487,19 @@ export default function App() {
 
 // Centralized inline styles for the auth/setup flow.
 // If you want to restyle the login page, start in this object.
+// ============================================================================
+// 5. INLINE STYLES (AUTH SCREEN & BOOT)
+// Centralized inline styles for the auth splash screen and boot loading shell.
+// Defines glowing background effects, card styles, and button gradients.
+// ============================================================================
 const styles = {
+  resShell:{
+    display: "flex",
+    gap: 32,
+    padding: "40px 32px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
   authShell: {
     minHeight: "100vh",
     display: "flex",
