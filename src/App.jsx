@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import {
   Alert,
   App as AntApp,
@@ -19,13 +19,14 @@ import {
   ShieldCheck,
   Stethoscope,
 } from "lucide-react";
-import AdminPanel from "../components/AdminPanel";
 import {
   adminEmails,
   isSupabaseConfigured,
   supabase,
   supabaseUrl,
 } from "../lib/supabaseClient";
+
+const AdminPanel = lazy(() => import("../components/AdminPanel"));
 
 const { Title, Text } = Typography;
 
@@ -397,7 +398,17 @@ function AppContent() {
     return <AuthScreen />;
   }
 
-  return <AdminPanel user={session.user} onSignOut={handleSignOut} />;
+  return (
+    <Suspense
+      fallback={
+        <div style={styles.bootShell}>
+          <Spin size="large" />
+        </div>
+      }
+    >
+      <AdminPanel user={session.user} onSignOut={handleSignOut} />
+    </Suspense>
+  );
 }
 
 // Top-level app wrapper:
