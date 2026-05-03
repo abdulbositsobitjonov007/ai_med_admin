@@ -43,6 +43,7 @@ import {
   Wind,
 } from "lucide-react";
 import {
+  adminEmails,
   isSupabaseConfigured,
   supabase,
   supabaseTable,
@@ -143,10 +144,10 @@ const UI_TEXT = {
     sidebarTitle: "Clinical workspace",
     sidebarText:
       "Keep the language switch, account status, and triage actions in one place so nurses and doctors can move faster.",
-    peopleDirectory: "People directory",
-    peopleDirectoryText:
-      "Open the list of people from recent submissions and jump into one consolidated profile.",
-    openDirectory: "Open directory",
+    nurseDirectory: "Nurse directory",
+    nurseDirectoryText:
+      "Open the list of allowed nurse/admin accounts and view profile details.",
+    openDirectory: "Open nurses",
     signedIn: "SIGNED IN",
     demoData: "Demo data",
     liveData: "Live data",
@@ -211,6 +212,15 @@ const UI_TEXT = {
     latestStatus: "Latest status",
     lastSeen: "Last seen",
     detailsAboutPerson: "Person details",
+    accountProfile: "Account profile",
+    accountEmail: "Account email",
+    accountRole: "Role",
+    currentSession: "Current session",
+    yesShort: "Yes",
+    noShort: "No",
+    noNurses: "No configured nurse/admin accounts were found.",
+    primaryAdmin: "Primary admin",
+    nurseMember: "Nurse member",
     noPatientAnswers: "No patient answers were recorded.",
     yes: "Yes",
     no: "No",
@@ -249,10 +259,10 @@ const UI_TEXT = {
     sidebarTitle: "Рабочее место врача",
     sidebarText:
       "Переключение языка, статус аккаунта и быстрые действия находятся в одной боковой панели, чтобы медсёстрам и врачам было легче работать.",
-    peopleDirectory: "Список людей",
-    peopleDirectoryText:
-      "Откройте список людей из последних заявок и переходите в их общий профиль.",
-    openDirectory: "Открыть список",
+    nurseDirectory: "Список медперсонала",
+    nurseDirectoryText:
+      "Откройте список разрешённых аккаунтов медсестёр и администраторов и смотрите их профили.",
+    openDirectory: "Открыть медперсонал",
     signedIn: "ВХОД ВЫПОЛНЕН",
     demoData: "Демо-данные",
     liveData: "Живые данные",
@@ -317,6 +327,15 @@ const UI_TEXT = {
     latestStatus: "Последний статус",
     lastSeen: "Последнее появление",
     detailsAboutPerson: "Данные человека",
+    accountProfile: "Профиль аккаунта",
+    accountEmail: "Email аккаунта",
+    accountRole: "Роль",
+    currentSession: "Текущая сессия",
+    yesShort: "Да",
+    noShort: "Нет",
+    noNurses: "Не найдены настроенные аккаунты медперсонала.",
+    primaryAdmin: "Главный администратор",
+    nurseMember: "Медсестра",
     noPatientAnswers: "Ответы пациента не записаны.",
     yes: "Да",
     no: "Нет",
@@ -355,10 +374,10 @@ const UI_TEXT = {
     sidebarTitle: "Shifokor ish paneli",
     sidebarText:
       "Tilni almashtirish, akkaunt holati va tezkor amallar bitta yon panelda turadi, shuning uchun hamshira va shifokorlarga ishlash osonroq bo'ladi.",
-    peopleDirectory: "Odamlar ro'yxati",
-    peopleDirectoryText:
-      "So'nggi yuborishlardagi odamlar ro'yxatini oching va ularning umumiy profiliga tez o'ting.",
-    openDirectory: "Ro'yxatni ochish",
+    nurseDirectory: "Hamshiralar ro'yxati",
+    nurseDirectoryText:
+      "Ruxsat berilgan hamshira va admin akkauntlari ro'yxatini oching va profil tafsilotlarini ko'ring.",
+    openDirectory: "Hamshiralarni ochish",
     signedIn: "TIZIMGA KIRILGAN",
     demoData: "Demo ma'lumotlar",
     liveData: "Jonli ma'lumotlar",
@@ -423,6 +442,15 @@ const UI_TEXT = {
     latestStatus: "Oxirgi status",
     lastSeen: "Oxirgi ko'rinish",
     detailsAboutPerson: "Odam tafsilotlari",
+    accountProfile: "Akkaunt profili",
+    accountEmail: "Akkaunt emaili",
+    accountRole: "Roli",
+    currentSession: "Joriy sessiya",
+    yesShort: "Ha",
+    noShort: "Yo'q",
+    noNurses: "Sozlangan hamshira/admin akkauntlari topilmadi.",
+    primaryAdmin: "Asosiy admin",
+    nurseMember: "Hamshira",
     noPatientAnswers: "Bemor javoblari yozilmagan.",
     yes: "Ha",
     no: "Yo'q",
@@ -570,76 +598,67 @@ const sanitizeRecord = (record) => ({
   ),
 });
 
+// Normalize user answer keys once, then resolve values by alias list.
+// This fixes cases like "Full name", "FullName", "full_name", and mixed casing.
+const getAnswerValueByAliases = (answers, aliases) => {
+  const normalizedAnswers = new Map(
+    Object.entries(answers || {}).map(([key, value]) => [normalizeFieldKey(key), value]),
+  );
+
+  for (const alias of aliases) {
+    const found = normalizedAnswers.get(normalizeFieldKey(alias));
+    if (found !== undefined && found !== null && found !== "") {
+      return found;
+    }
+  }
+
+  return "";
+};
+
 const derivePersonName = (record, fallbackLabel) => {
   const answers = record?.user_answers || {};
-  const rawName =
-    answers.full_name ||
-    answers.fullname ||
-    answers.name ||
-    answers.patient_name ||
-    answers.patientname;
+  const rawName = getAnswerValueByAliases(answers, [
+    "full_name",
+    "fullname",
+    "full name",
+    "name",
+    "patient_name",
+    "patientname",
+    "patient name",
+  ]);
 
   return sanitizeText(rawName || "", 80) || fallbackLabel;
 };
 
-const derivePersonMeta = (record) => {
-  const answers = record?.user_answers || {};
-  return {
-    age: sanitizeUnknownValue(answers.age || answers.age_group, 40),
-    feeling: sanitizeUnknownValue(answers.feeling || answers.mood, 60),
-  };
+const formatProfileNameFromEmail = (email, fallbackLabel) => {
+  const local = sanitizeText(email.split("@")[0] || "", 80);
+  if (!local) return fallbackLabel;
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((token) => token[0].toUpperCase() + token.slice(1))
+    .join(" ");
 };
 
-// Build a lightweight directory from submission records so the sidebar can
-// open a person-centric view even when the backend only gives us submissions.
-const buildPeopleDirectory = (records, fallbackLabel) => {
-  const directory = new Map();
+// Build nurse/admin account cards from configured allowed emails.
+// This uses env-configured accounts so staff can quickly open peer profiles.
+const buildNurseProfiles = (allowedEmails, currentUserEmail, fallbackLabel, text) => {
+  const normalizedCurrent = sanitizeText(currentUserEmail || "", 120).toLowerCase();
+  const uniqueEmails = Array.from(
+    new Set(
+      [...allowedEmails, normalizedCurrent]
+        .map((email) => sanitizeText(email || "", 120).toLowerCase())
+        .filter(Boolean),
+    ),
+  );
 
-  records.forEach((record) => {
-    const displayName = derivePersonName(record, fallbackLabel);
-    const directoryKey = `${displayName.toLowerCase()}::${record.language || "unknown"}`;
-    const existing = directory.get(directoryKey);
-    const meta = derivePersonMeta(record);
-
-    if (!existing) {
-      directory.set(directoryKey, {
-        id: directoryKey,
-        displayName,
-        latestStatus: record.result_data?.color || "",
-        latestDate: record.created_at || "",
-        languages: new Set([record.language].filter(Boolean)),
-        conditions: new Set([record.condition_key].filter(Boolean)),
-        submissions: [record],
-        meta,
-      });
-      return;
-    }
-
-    existing.submissions.push(record);
-    if (record.language) existing.languages.add(record.language);
-    if (record.condition_key) existing.conditions.add(record.condition_key);
-
-    if (!existing.meta.age && meta.age) existing.meta.age = meta.age;
-    if (!existing.meta.feeling && meta.feeling) existing.meta.feeling = meta.feeling;
-
-    if (new Date(record.created_at).getTime() > new Date(existing.latestDate).getTime()) {
-      existing.latestDate = record.created_at || existing.latestDate;
-      existing.latestStatus = record.result_data?.color || existing.latestStatus;
-    }
-  });
-
-  return Array.from(directory.values())
-    .map((person) => ({
-      ...person,
-      languages: Array.from(person.languages),
-      conditions: Array.from(person.conditions),
-      submissions: person.submissions.sort(
-        (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
-      ),
-    }))
-    .sort(
-      (left, right) => new Date(right.latestDate).getTime() - new Date(left.latestDate).getTime(),
-    );
+  return uniqueEmails.map((email, index) => ({
+    id: `nurse-${email}`,
+    email,
+    displayName: formatProfileNameFromEmail(email, fallbackLabel),
+    role: index === 0 ? text.primaryAdmin : text.nurseMember,
+    isCurrentSession: email === normalizedCurrent,
+  }));
 };
 
 const formatDate = (iso, locale) => {
@@ -919,18 +938,16 @@ const DetailDrawer = ({
   );
 };
 
-const PeopleDirectoryDrawer = ({
+const NurseDirectoryDrawer = ({
   open,
   onClose,
-  people,
-  onSelectPerson,
+  nurses,
+  onSelectNurse,
   text,
-  statusLabels,
-  locale,
   isMobile,
 }) => (
   <Drawer
-    title={text.peopleDirectory}
+    title={text.nurseDirectory}
     placement="left"
     width={isMobile ? "100%" : 420}
     open={open}
@@ -941,16 +958,16 @@ const PeopleDirectoryDrawer = ({
     }}
   >
     <Space direction="vertical" size={14} style={{ width: "100%" }}>
-      <Text style={{ color: "#64748b" }}>{text.peopleDirectoryText}</Text>
-      {people.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={text.noPeople} />
+      <Text style={{ color: "#64748b" }}>{text.nurseDirectoryText}</Text>
+      {nurses.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={text.noNurses} />
       ) : (
-        people.map((person) => (
+        nurses.map((nurse) => (
           <Card
-            key={person.id}
+            key={nurse.id}
             bordered={false}
             hoverable
-            onClick={() => onSelectPerson(person)}
+            onClick={() => onSelectNurse(nurse)}
             style={{ borderRadius: 18, cursor: "pointer" }}
             styles={{ body: { padding: 16 } }}
           >
@@ -964,31 +981,23 @@ const PeopleDirectoryDrawer = ({
                   />
                   <div>
                     <Text strong style={{ color: "#0f172a", fontSize: 15 }}>
-                      {person.displayName}
+                      {nurse.displayName}
                     </Text>
-                    <div style={{ color: "#64748b", fontSize: 12 }}>
-                      {text.lastSeen}: {formatDate(person.latestDate, locale)}
-                    </div>
+                    <div style={{ color: "#64748b", fontSize: 12 }}>{nurse.email}</div>
                   </div>
                 </Space>
                 <ChevronRight size={18} color="#94a3b8" />
               </Space>
 
               <Space wrap size={[8, 8]}>
-                <StatusBadge
-                  status={person.latestStatus}
-                  label={statusLabels[person.latestStatus] || text.unknown}
-                />
                 <Tag style={metaTagStyle}>
-                  <Activity size={12} />
-                  {person.submissions.length} {text.submissionsCount.toLowerCase()}
+                  <ShieldCheck size={12} />
+                  {nurse.role}
                 </Tag>
-                {person.languages.map((language) => (
-                  <Tag key={`${person.id}-${language}`} style={metaTagStyle}>
-                    <Languages size={12} />
-                    {RECORD_LANGUAGE_LABELS[language] || language}
-                  </Tag>
-                ))}
+                <Tag style={metaTagStyle}>
+                  <UserRound size={12} />
+                  {text.currentSession}: {nurse.isCurrentSession ? text.yesShort : text.noShort}
+                </Tag>
               </Space>
             </Space>
           </Card>
@@ -998,25 +1007,14 @@ const PeopleDirectoryDrawer = ({
   </Drawer>
 );
 
-const PersonDetailDrawer = ({
-  open,
-  onClose,
-  person,
-  text,
-  statusLabels,
-  locale,
-  isMobile,
-}) => {
-  if (!person) return null;
-
-  const latestSubmission = person.submissions[0];
-  const latestAnswers = latestSubmission?.user_answers || {};
+const NurseProfileDrawer = ({ open, onClose, nurse, text, isMobile }) => {
+  if (!nurse) return null;
 
   return (
     <Drawer
-      title={text.detailsAboutPerson}
+      title={text.accountProfile}
       placement="right"
-      width={isMobile ? "100%" : 520}
+      width={isMobile ? "100%" : 500}
       open={open}
       onClose={onClose}
       styles={{
@@ -1027,42 +1025,18 @@ const PersonDetailDrawer = ({
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <Card bordered={false} style={{ borderRadius: 18 }}>
           <Space direction="vertical" size={10} style={{ width: "100%" }}>
-            <Space style={{ justifyContent: "space-between", width: "100%" }} align="start">
-              <Space size={12}>
-                <Avatar
-                  size={50}
-                  style={{ background: "linear-gradient(135deg, #0f766e, #38bdf8)" }}
-                  icon={<UserRound size={20} />}
-                />
-                <div>
-                  <Title level={4} style={{ margin: 0, color: "#0f172a" }}>
-                    {person.displayName}
-                  </Title>
-                  <Text style={{ color: "#64748b" }}>
-                    {text.lastSeen}: {formatDate(person.latestDate, locale)}
-                  </Text>
-                </div>
-              </Space>
-              <StatusBadge
-                status={person.latestStatus}
-                label={statusLabels[person.latestStatus] || text.unknown}
+            <Space size={12}>
+              <Avatar
+                size={50}
+                style={{ background: "linear-gradient(135deg, #0f766e, #38bdf8)" }}
+                icon={<UserRound size={20} />}
               />
-            </Space>
-
-            <Space wrap size={[8, 8]}>
-              <Tag style={metaTagStyle}>
-                <Activity size={12} />
-                {person.submissions.length} {text.submissionsCount.toLowerCase()}
-              </Tag>
-              {person.conditions.map((condition) => (
-                <ConditionTag key={`${person.id}-${condition}`} condition={condition} />
-              ))}
-              {person.languages.map((language) => (
-                <Tag key={`${person.id}-lang-${language}`} style={metaTagStyle}>
-                  <Languages size={12} />
-                  {RECORD_LANGUAGE_LABELS[language] || language}
-                </Tag>
-              ))}
+              <div>
+                <Title level={4} style={{ margin: 0, color: "#0f172a" }}>
+                  {nurse.displayName}
+                </Title>
+                <Text style={{ color: "#64748b" }}>{nurse.email}</Text>
+              </div>
             </Space>
           </Space>
         </Card>
@@ -1070,7 +1044,7 @@ const PersonDetailDrawer = ({
         <Card bordered={false} style={{ borderRadius: 18 }}>
           <Space direction="vertical" size={12} style={{ width: "100%" }}>
             <Text strong style={sectionTitleStyle}>
-              {text.personSummary}
+              {text.accountProfile}
             </Text>
             <Descriptions
               bordered
@@ -1090,105 +1064,16 @@ const PersonDetailDrawer = ({
                 },
               }}
             >
-              <Descriptions.Item label={text.submissionsCount}>
-                {person.submissions.length}
+              <Descriptions.Item label={text.accountEmail}>
+                {nurse.email}
               </Descriptions.Item>
-              <Descriptions.Item label={text.latestStatus}>
-                {statusLabels[person.latestStatus] || text.unknown}
+              <Descriptions.Item label={text.accountRole}>
+                {nurse.role}
               </Descriptions.Item>
-              <Descriptions.Item label={text.lastSeen}>
-                {formatDate(person.latestDate, locale)}
+              <Descriptions.Item label={text.currentSession}>
+                {nurse.isCurrentSession ? text.yesShort : text.noShort}
               </Descriptions.Item>
-              {person.meta.age ? (
-                <Descriptions.Item label={text.fieldAge}>
-                  {formatValue(person.meta.age, text, locale)}
-                </Descriptions.Item>
-              ) : null}
-              {person.meta.feeling ? (
-                <Descriptions.Item label={text.fieldFeeling}>
-                  {formatValue(person.meta.feeling, text, locale)}
-                </Descriptions.Item>
-              ) : null}
             </Descriptions>
-          </Space>
-        </Card>
-
-        <Card bordered={false} style={{ borderRadius: 18 }}>
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            <Text strong style={sectionTitleStyle}>
-              {text.patientResponses}
-            </Text>
-            {Object.keys(latestAnswers).length === 0 ? (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={text.noPatientAnswers}
-              />
-            ) : (
-              <Descriptions
-                bordered
-                size="small"
-                column={1}
-                styles={{
-                  label: {
-                    width: isMobile ? 132 : 180,
-                    background: "#f8fafc",
-                    color: "#475569",
-                    fontSize: 12,
-                    fontWeight: 700,
-                  },
-                  content: {
-                    color: "#0f172a",
-                    fontSize: 13,
-                  },
-                }}
-              >
-                {Object.entries(latestAnswers).map(([key, value]) => (
-                  <Descriptions.Item key={key} label={translateFieldLabel(key, text)}>
-                    {formatValue(value, text, locale)}
-                  </Descriptions.Item>
-                ))}
-              </Descriptions>
-            )}
-          </Space>
-        </Card>
-
-        <Card bordered={false} style={{ borderRadius: 18 }}>
-          <Space direction="vertical" size={12} style={{ width: "100%" }}>
-            <Text strong style={sectionTitleStyle}>
-              {text.recentSubmissions}
-            </Text>
-            {person.submissions.length === 0 ? (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={text.noRecentSubmissions}
-              />
-            ) : (
-              person.submissions.slice(0, 5).map((submission) => (
-                <Card
-                  key={submission.id}
-                  size="small"
-                  bordered={false}
-                  style={{ borderRadius: 14, background: "#f8fafc" }}
-                >
-                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                    <Space wrap size={[8, 8]}>
-                      <Tag style={metaTagStyle}>
-                        <Clock3 size={12} />
-                        {formatDate(submission.created_at, locale)}
-                      </Tag>
-                      <ConditionTag condition={submission.condition_key} />
-                      <StatusBadge
-                        status={submission.result_data?.color}
-                        label={statusLabels[submission.result_data?.color] || text.unknown}
-                      />
-                    </Space>
-                    <Text style={{ color: "#475569" }}>
-                      {submission.result_data?.advice || "-"}
-                    </Text>
-                  </Space>
-                </Card>
-              ))
-            )}
           </Space>
         </Card>
       </Space>
@@ -1210,8 +1095,8 @@ export default function AdminPanel({ user, onSignOut }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [directoryOpen, setDirectoryOpen] = useState(false);
-  const [selectedPerson, setSelectedPerson] = useState(null);
-  const [personDrawerOpen, setPersonDrawerOpen] = useState(false);
+  const [selectedNurse, setSelectedNurse] = useState(null);
+  const [nurseProfileOpen, setNurseProfileOpen] = useState(false);
   const [usingMockData, setUsingMockData] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [api, contextHolder] = notification.useNotification();
@@ -1305,9 +1190,9 @@ export default function AdminPanel({ user, onSignOut }) {
     [data],
   );
 
-  const peopleDirectory = useMemo(
-    () => buildPeopleDirectory(data, text.unknownPerson),
-    [data, text.unknownPerson],
+  const nurseProfiles = useMemo(
+    () => buildNurseProfiles(adminEmails, user?.email, text.unknownPerson, text),
+    [text, user?.email],
   );
 
   useEffect(() => {
@@ -1343,6 +1228,7 @@ export default function AdminPanel({ user, onSignOut }) {
       dataIndex: "created_at",
       key: "created_at",
       width: 170,
+      responsive: ["xs"],
       render: (value) => (
         <Space direction="vertical" size={0}>
           <Text style={{ fontWeight: 700, color: "#0f172a", fontSize: 13 }}>
@@ -1352,10 +1238,24 @@ export default function AdminPanel({ user, onSignOut }) {
       ),
     },
     {
+      // Surface patient name in the primary grid so clinicians do not need to
+      // open each row just to identify who the submission belongs to.
+      title: text.fieldFullName,
+      key: "patient_name",
+      width: 180,
+      responsive: ["xs"],
+      render: (_, record) => (
+        <Text strong style={{ color: "#0f172a" }}>
+          {derivePersonName(record, text.unknownPerson)}
+        </Text>
+      ),
+    },
+    {
       title: text.condition,
       dataIndex: "condition_key",
       key: "condition_key",
       width: 160,
+      responsive: ["md"],
       render: (value) => <ConditionTag condition={value} />,
     },
     {
@@ -1363,6 +1263,7 @@ export default function AdminPanel({ user, onSignOut }) {
       dataIndex: "language",
       key: "language",
       width: 110,
+      responsive: ["lg"],
       render: (value) => (
         <Tag style={metaTagStyle}>
           <Languages size={12} />
@@ -1374,6 +1275,7 @@ export default function AdminPanel({ user, onSignOut }) {
       title: text.status,
       key: "status",
       width: 150,
+      responsive: ["xs"],
       render: (_, record) => (
         <StatusBadge
           status={record.result_data?.color}
@@ -1384,6 +1286,7 @@ export default function AdminPanel({ user, onSignOut }) {
     {
       title: text.advice,
       key: "advice",
+      responsive: ["xl"],
       render: (_, record) => (
         <Tooltip title={record.result_data?.advice || text.noAdvice}>
           <Text
@@ -1405,6 +1308,7 @@ export default function AdminPanel({ user, onSignOut }) {
       key: "actions",
       width: 92,
       align: "right",
+      responsive: ["xs"],
       render: (_, record) => (
         <Button
           type="text"
@@ -1425,6 +1329,9 @@ export default function AdminPanel({ user, onSignOut }) {
   const activeFilterLabel = filterStatus
     ? statusLabels[filterStatus]
     : text.allSubmissions;
+
+  // Keep mobile usable by showing only the highest-value columns first.
+  const tableScrollX = isMobile ? 560 : 980;
 
   return (
     <>
@@ -1511,7 +1418,7 @@ export default function AdminPanel({ user, onSignOut }) {
                             {sanitizeText(user?.email || "Admin", 120)}
                           </div>
                           <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-                            {text.peopleDirectory}
+                            {text.nurseDirectory}
                           </div>
                         </div>
                       </Space>
@@ -1540,11 +1447,11 @@ export default function AdminPanel({ user, onSignOut }) {
                     <Space direction="vertical" size={10} style={{ width: "100%" }}>
                       <Space style={{ justifyContent: "space-between", width: "100%" }}>
                         <Text strong style={{ color: "#0f172a" }}>
-                          {text.peopleDirectory}
+                          {text.nurseDirectory}
                         </Text>
                         <Users size={16} color="#0f766e" />
                       </Space>
-                      <Text style={{ color: "#64748b" }}>{text.peopleDirectoryText}</Text>
+                      <Text style={{ color: "#64748b" }}>{text.nurseDirectoryText}</Text>
                       <Button
                         onClick={() => setDirectoryOpen(true)}
                         style={{ borderRadius: 12, width: "100%", fontWeight: 700 }}
@@ -1571,7 +1478,9 @@ export default function AdminPanel({ user, onSignOut }) {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))",
+                      gridTemplateColumns: isMobile
+                        ? "repeat(2, minmax(0, 1fr))"
+                        : "repeat(3, minmax(0, 1fr))",
                       gap: 8,
                     }}
                   >
@@ -1886,7 +1795,8 @@ export default function AdminPanel({ user, onSignOut }) {
                       dataSource={filtered}
                       columns={columns}
                       rowKey="id"
-                      scroll={{ x: 860 }}
+                      scroll={{ x: tableScrollX }}
+                      size={isMobile ? "small" : "middle"}
                       pagination={{
                         pageSize: 10,
                         showSizeChanger: false,
@@ -1933,28 +1843,24 @@ export default function AdminPanel({ user, onSignOut }) {
         isMobile={isMobile}
       />
 
-      <PeopleDirectoryDrawer
+      <NurseDirectoryDrawer
         open={directoryOpen}
         onClose={() => setDirectoryOpen(false)}
-        people={peopleDirectory}
-        onSelectPerson={(person) => {
+        nurses={nurseProfiles}
+        onSelectNurse={(nurse) => {
           setDirectoryOpen(false);
-          setSelectedPerson(person);
-          setPersonDrawerOpen(true);
+          setSelectedNurse(nurse);
+          setNurseProfileOpen(true);
         }}
         text={text}
-        statusLabels={statusLabels}
-        locale={uiLanguage}
         isMobile={isMobile}
       />
 
-      <PersonDetailDrawer
-        open={personDrawerOpen}
-        onClose={() => setPersonDrawerOpen(false)}
-        person={selectedPerson}
+      <NurseProfileDrawer
+        open={nurseProfileOpen}
+        onClose={() => setNurseProfileOpen(false)}
+        nurse={selectedNurse}
         text={text}
-        statusLabels={statusLabels}
-        locale={uiLanguage}
         isMobile={isMobile}
       />
 
