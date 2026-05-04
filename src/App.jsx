@@ -265,15 +265,7 @@ function AuthScreen() {
               </Text>
             </div>
 
-            {adminEmails.length > 0 && (
-              <Alert
-                type="info"
-                showIcon
-                message="Email allowlist is active"
-                description={`Allowed: ${adminEmails.join(", ")}`}
-                style={{ borderRadius: 14 }}
-              />
-            )}
+
 
             {errorMessage && (
               <Alert
