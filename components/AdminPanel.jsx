@@ -1216,6 +1216,70 @@ const NurseProfileDrawer = ({ open, onClose, nurse, text, isMobile }) => {
 // Shows the log of patients who have been marked as "Checked" and removed
 // from the main active dashboard board.
 // ============================================================================
+const HistoryCard = ({ entry, text, statusLabels, locale }) => {
+  const [expanded, setExpanded] = useState(false);
+  const status = entry.result_data?.color;
+  const statusConfig = STATUS_CONFIG[status] || {};
+  
+  return (
+    <Card
+      bordered={false}
+      onClick={() => setExpanded(!expanded)}
+      style={{
+        borderRadius: 16,
+        border: "1px solid #e2e8f0",
+        background: "#fff",
+        cursor: "pointer"
+      }}
+      styles={{ body: { padding: 14 } }}
+    >
+      <Space direction="vertical" size={10} style={{ width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <Text strong style={{ color: "#0f172a", fontSize: 14 }}>
+              {derivePersonName(entry, text.unknownPerson)}
+            </Text>
+            <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>
+              <Clock3 size={11} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />
+              {text.checkedAt}: {formatDate(entry._checkedAt, locale)}
+              {entry._deletedBy && (
+                <span style={{ marginLeft: 8 }}>
+                  (By: {entry._deletedBy})
+                </span>
+              )}
+            </div>
+          </div>
+          <StatusBadge status={status} label={statusLabels?.[status] || text.unknown} />
+        </div>
+
+        <Space wrap size={[8, 8]}>
+          <ConditionTag condition={entry.condition_key} />
+          <Tag style={metaTagStyle}>
+            <Languages size={11} />
+            {RECORD_LANGUAGE_LABELS[entry.language] || entry.language || text.unknown}
+          </Tag>
+        </Space>
+
+        {entry.result_data?.advice && expanded && (
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              background: statusConfig.bg || "#f8fafc",
+              border: `1px solid ${statusConfig.border || "#e2e8f0"}`,
+              fontSize: 13,
+              color: "#334155",
+              lineHeight: 1.6,
+            }}
+          >
+            {entry.result_data.advice}
+          </div>
+        )}
+      </Space>
+    </Card>
+  );
+};
+
 const HistoryDrawer = ({ open, onClose, history, text, statusLabels, locale, isMobile }) => (
   <Drawer
     title={
@@ -1253,61 +1317,15 @@ const HistoryDrawer = ({ open, onClose, history, text, statusLabels, locale, isM
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={text.noHistory} />
     ) : (
       <Space direction="vertical" size={12} style={{ width: "100%" }}>
-        {history.map((entry) => {
-          const status = entry.result_data?.color;
-          const statusConfig = STATUS_CONFIG[status] || {};
-          return (
-            <Card
-              key={`${entry.id}-${entry._checkedAt}`}
-              bordered={false}
-              style={{
-                borderRadius: 16,
-                border: "1px solid #e2e8f0",
-                background: "#fff",
-              }}
-              styles={{ body: { padding: 14 } }}
-            >
-              <Space direction="vertical" size={10} style={{ width: "100%" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                  <div>
-                    <Text strong style={{ color: "#0f172a", fontSize: 14 }}>
-                      {derivePersonName(entry, text.unknownPerson)}
-                    </Text>
-                    <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>
-                      <Clock3 size={11} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />
-                      {text.checkedAt}: {formatDate(entry._checkedAt, locale)}
-                    </div>
-                  </div>
-                  <StatusBadge status={status} label={statusLabels?.[status] || text.unknown} />
-                </div>
-
-                <Space wrap size={[8, 8]}>
-                  <ConditionTag condition={entry.condition_key} />
-                  <Tag style={metaTagStyle}>
-                    <Languages size={11} />
-                    {RECORD_LANGUAGE_LABELS[entry.language] || entry.language || text.unknown}
-                  </Tag>
-                </Space>
-
-                {entry.result_data?.advice && (
-                  <div
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      background: statusConfig.bg || "#f8fafc",
-                      border: `1px solid ${statusConfig.border || "#e2e8f0"}`,
-                      fontSize: 13,
-                      color: "#334155",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    {entry.result_data.advice}
-                  </div>
-                )}
-              </Space>
-            </Card>
-          );
-        })}
+        {history.map((entry) => (
+          <HistoryCard
+            key={`${entry.id}-${entry._checkedAt}`}
+            entry={entry}
+            text={text}
+            statusLabels={statusLabels}
+            locale={locale}
+          />
+        ))}
       </Space>
     )}
   </Drawer>
@@ -1322,7 +1340,7 @@ export default function AdminPanel({ user, onSignOut }) {
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
   const isTablet = screens.lg && !screens.xxl;
-  const [uiLanguage, setUiLanguage] = useState("en");
+  const [uiLanguage, setUiLanguage] = useState("uz");
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -1387,20 +1405,61 @@ export default function AdminPanel({ user, onSignOut }) {
     setConfirmingRecord(record);
   }, []);
 
-  const handleConfirmChecked = useCallback(() => {
+  const handleConfirmChecked = useCallback(async () => {
     if (!confirmingRecord) return;
-    const entryWithTimestamp = { ...confirmingRecord, _checkedAt: new Date().toISOString() };
-    setCheckedHistory((prev) => [entryWithTimestamp, ...prev]);
-    setData((prev) => prev.filter((r) => r.id !== confirmingRecord.id));
-    setSupervisedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(confirmingRecord.id);
-      return next;
-    });
+    
+    const isMock = !isSupabaseConfigured || usingMockData;
+    const entryWithTimestamp = { 
+      ...confirmingRecord, 
+      _checkedAt: new Date().toISOString(),
+      _deletedBy: user?.email || 'Unknown'
+    };
+
+    try {
+      if (!isMock) {
+        // Insert to history
+        const { error: insertError } = await supabase.from('submission_history').insert({
+          original_submission_id: confirmingRecord.id,
+          condition_key: confirmingRecord.condition_key,
+          language: confirmingRecord.language,
+          result_data: confirmingRecord.result_data,
+          user_answers: confirmingRecord.user_answers,
+          deleted_by: entryWithTimestamp._deletedBy,
+          deleted_at: entryWithTimestamp._checkedAt
+        });
+        
+        if (insertError) {
+          throw new Error(`History Insert Failed: ${insertError.message || JSON.stringify(insertError)}`);
+        }
+        
+        // Delete from main table
+        const { error: deleteError } = await supabase.from(supabaseTable).delete().eq('id', confirmingRecord.id);
+        
+        if (deleteError) {
+          throw new Error(`Delete Failed: ${deleteError.message || JSON.stringify(deleteError)}. Ensure DELETE is enabled in Supabase Policies!`);
+        }
+      }
+      
+      setCheckedHistory((prev) => [entryWithTimestamp, ...prev]);
+      setData((prev) => prev.filter((r) => r.id !== confirmingRecord.id));
+      setSupervisedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(confirmingRecord.id);
+        return next;
+      });
+    } catch (err) {
+      console.error("Failed to delete patient:", err);
+      api.error({
+        message: "Action failed",
+        description: err?.message || "Could not remove patient from backend.",
+        placement: "topRight"
+      });
+    }
+
     setConfirmingRecord(null);
     setDrawerOpen(false);
     setSelectedRecord(null);
-  }, [confirmingRecord]);
+  }, [confirmingRecord, usingMockData, user, api]);
 
   const applyStatusFilter = useCallback((status) => {
     setFilterStatus(status);
@@ -1421,14 +1480,29 @@ export default function AdminPanel({ user, onSignOut }) {
         return;
       }
 
-      const { data: rows, error } = await supabase
-        .from(supabaseTable)
-        .select("*")
-        .order("created_at", { ascending: false });
+      const [submissionsResponse, historyResponse] = await Promise.all([
+        supabase.from(supabaseTable).select("*").order("created_at", { ascending: false }),
+        supabase.from('submission_history').select("*").order("deleted_at", { ascending: false })
+      ]);
 
-      if (error) throw error;
+      if (submissionsResponse.error) throw submissionsResponse.error;
+      // We don't throw on historyResponse.error because the table might not exist yet
 
-      setData((rows || []).map(sanitizeRecord));
+      setData((submissionsResponse.data || []).map(sanitizeRecord));
+      
+      if (!historyResponse.error) {
+         const mappedHistory = (historyResponse.data || []).map(h => ({
+           id: h.original_submission_id || h.id,
+           condition_key: h.condition_key,
+           language: h.language,
+           result_data: h.result_data,
+           user_answers: h.user_answers,
+           _checkedAt: h.deleted_at,
+           _deletedBy: h.deleted_by
+         }));
+         setCheckedHistory(mappedHistory);
+      }
+      
       setUsingMockData(false);
       setLastUpdated(new Date().toISOString());
     } catch (error) {
@@ -1528,10 +1602,10 @@ export default function AdminPanel({ user, onSignOut }) {
     {
       title: text.fieldFullName,
       key: "patient_name",
-      width: isMobile ? undefined : 180,
+      width: isMobile ? undefined : 220,
       render: (_, record) => (
         <Space direction="vertical" size={isMobile ? 2 : 0}>
-          <Text strong style={{ color: "#0f172a", display: "block" }}>
+          <Text strong style={{ color: "#0f172a", display: "block", whiteSpace: "nowrap" }}>
             {derivePersonName(record, text.unknownPerson)}
           </Text>
           {isMobile && (
@@ -1584,7 +1658,7 @@ export default function AdminPanel({ user, onSignOut }) {
           <Text
             ellipsis
             style={{
-              maxWidth: isMobile ? 220 : 360,
+              maxWidth: 160,
               display: "block",
               color: "#475569",
               fontSize: 13,

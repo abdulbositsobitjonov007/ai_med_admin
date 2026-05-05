@@ -134,16 +134,16 @@ function AuthScreen() {
 
       if (!isUserAuthorized(data.user)) {
         await supabase.auth.signOut();
-        throw new Error("This account is not allowed to access the admin panel.");
+        throw new Error("Bu akkauntga admin paneliga kirishga ruxsat yo'q.");
       }
 
       notification.success({
-        message: "Signed in",
-        description: "Welcome back. Live dashboard access is ready.",
+        message: "Tizimga kirildi",
+        description: "Xush kelibsiz. Jonli boshqaruv paneli ishlatishga tayyor.",
         placement: "topRight",
       });
     } catch (error) {
-      setErrorMessage(error.message || "Unable to sign in with those credentials.");
+      setErrorMessage(error.message || "Ushbu ma'lumotlar bilan kirib bo'lmadi.");
     } finally {
       setSubmitting(false);
     }
@@ -155,7 +155,7 @@ function AuthScreen() {
     const email = form.getFieldValue("email")?.trim().toLowerCase();
 
     if (!email) {
-      setErrorMessage("Enter your email first, then use reset password.");
+      setErrorMessage("Avval emailingizni kiriting, so'ngra parolni tiklashdan foydalaning.");
       return;
     }
 
@@ -170,12 +170,12 @@ function AuthScreen() {
       if (error) throw error;
 
       notification.success({
-        message: "Reset email sent",
-        description: "Check your inbox for the password reset link.",
+        message: "Tiklash havolasi yuborildi",
+        description: "Parolni tiklash havolasi uchun pochta qutingizni tekshiring.",
         placement: "topRight",
       });
     } catch (error) {
-      setErrorMessage(error.message || "Could not send reset email.");
+      setErrorMessage(error.message || "Tiklash uchun elektron pochta yuborib bo'lmadi.");
     } finally {
       setResetting(false);
     }
@@ -206,18 +206,16 @@ function AuthScreen() {
                 <ShieldCheck size={26} color="#fff" />
               </div>
               <div>
-                <Text style={styles.eyebrow}>Protected Access</Text>
-                <Title 
-                  level={1} 
+                
+                <Title
+                  level={1}
                   style={{
                     ...styles.heroTitle,
                     fontSize: isMobile ? 34 : 46,
                     letterSpacing: isMobile ? "-1.2px" : "-1.6px",
                   }}
                 >
-                  {isMobile 
-                    ? "PediaScreen admin" 
-                    : "PediaScreen admin, built for calm daily use."}
+                  PediaScreen admin
                 </Title>
               </div>
             </Space>
@@ -225,22 +223,21 @@ function AuthScreen() {
             {!isMobile && (
               <>
                 <Text style={styles.heroText}>
-                  Review incoming screenings, triage urgent cases faster, and keep
-                  your admin workflow clean and secure with Supabase login.
+                  Kelayotgan skrininglarni ko'rib chiqing, shoshilinch holatlarni tezroq saralang va admin ish oqimini Supabase tizimiga kirish bilan xavfsiz saqlang.
                 </Text>
 
                 <Space wrap size={[10, 10]}>
                   <Tag style={styles.heroTag}>
                     <ShieldCheck size={14} />
-                    Session-based auth
+                    Sessiyaga asoslangan ruxsat
                   </Tag>
                   <Tag style={styles.heroTag}>
                     <KeyRound size={14} />
-                    Password reset support
+                    Parolni tiklash tizimi
                   </Tag>
                   <Tag style={styles.heroTag}>
                     <Mail size={14} />
-                    Optional email allowlist
+                    Ixtiyoriy ruxsat berilgan email ro'yxati
                   </Tag>
                 </Space>
               </>
@@ -255,14 +252,11 @@ function AuthScreen() {
         >
           <Space direction="vertical" size={20} style={{ width: "100%" }}>
             <div>
-              <Text style={styles.eyebrow}>Admin Sign In</Text>
+              <Text style={styles.eyebrow}>Admin Kirish</Text>
               <Title level={3} style={{ marginTop: 6, marginBottom: 8 }}>
-                Welcome back
+                Xush kelibsiz
               </Title>
-              <Text style={{ color: "#64748b" }}>
-                Sign in with a Supabase Auth user that is allowed to access this
-                panel.
-              </Text>
+              <Text style={styles.eyebrow}>Himoyalangan kirish</Text>
             </div>
 
 
@@ -280,25 +274,25 @@ function AuthScreen() {
               <Form.Item
                 name="email"
                 label="Email"
-                rules={[{ required: true, message: "Enter your admin email." }]}
+                rules={[{ required: true, message: "Admin emailingizni kiriting." }]}
               >
                 <Input
                   size="large"
                   prefix={<Mail size={16} />}
-                  placeholder="admin@hospital.com"
+                  placeholder="admin@shifoxona.uz"
                   autoComplete="email"
                 />
               </Form.Item>
 
               <Form.Item
                 name="password"
-                label="Password"
-                rules={[{ required: true, message: "Enter your password." }]}
+                label="Parol"
+                rules={[{ required: true, message: "Parolingizni kiriting." }]}
               >
                 <Input.Password
                   size="large"
                   prefix={<LockKeyhole size={16} />}
-                  placeholder="Your password"
+                  placeholder="Sizning parolingiz"
                   autoComplete="current-password"
                 />
               </Form.Item>
@@ -312,7 +306,7 @@ function AuthScreen() {
                   block
                   style={styles.primaryButton}
                 >
-                  Sign In
+                  Kirish
                 </Button>
                 <Button
                   type="default"
@@ -322,7 +316,7 @@ function AuthScreen() {
                   block
                   style={styles.secondaryButton}
                 >
-                  Reset Password
+                  Parolni Tiklash
                 </Button>
               </Space>
             </Form>
@@ -368,8 +362,8 @@ function AppContent() {
       if (currentSession?.user && !isUserAuthorized(currentSession.user)) {
         await supabase.auth.signOut();
         notification.error({
-          message: "Access denied",
-          description: "This account is not permitted to use the admin panel.",
+          message: "Kirish rad etildi",
+          description: "Bu akkauntga admin paneliga kirishga ruxsat yo'q.",
           placement: "topRight",
         });
         setSession(null);
@@ -390,8 +384,8 @@ function AppContent() {
         await supabase.auth.signOut();
         setSession(null);
         notification.error({
-          message: "Access denied",
-          description: "This account is not permitted to use the admin panel.",
+          message: "Kirish rad etildi",
+          description: "Bu akkauntga admin paneliga kirishga ruxsat yo'q.",
           placement: "topRight",
         });
         return;
@@ -411,8 +405,8 @@ function AppContent() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     notification.info({
-      message: "Signed out",
-      description: "Your admin session has been closed.",
+      message: "Tizimdan chiqildi",
+      description: "Sizning admin sessiyangiz yopildi.",
       placement: "topRight",
     });
   };
@@ -485,7 +479,7 @@ export default function App() {
 // Defines glowing background effects, card styles, and button gradients.
 // ============================================================================
 const styles = {
-  resShell:{
+  resShell: {
     display: "flex",
     gap: 32,
     padding: "40px 32px",
@@ -541,6 +535,9 @@ const styles = {
     lineHeight: 1.04,
     letterSpacing: "-1.6px",
     color: "#0f172a",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
   },
   heroText: {
     fontSize: 18,
