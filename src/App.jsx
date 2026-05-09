@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import {
   Alert,
   App as AntApp,
@@ -108,6 +109,8 @@ function SetupScreen() {
 // login, password reset functionality, and an optional visual email allowlist.
 // Handles its own responsive layout using Grid.useBreakpoint().
 // ============================================================================
+const HCAPTCHA_SITE_KEY = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
+
 function AuthScreen() {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
@@ -115,11 +118,18 @@ function AuthScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const captchaRef = useRef(null);
   const { notification } = AntApp.useApp();
 
   // Handles sign-in using Supabase Auth email/password.
   // If the account exists and passes the email allowlist, the user gets a session.
   const handleLogin = async (values) => {
+    if (!captchaToken) {
+      setErrorMessage("Iltimos, avval captchani tasdiqlang.");
+      return;
+    }
+
     setSubmitting(true);
     setErrorMessage("");
 
@@ -128,6 +138,7 @@ function AuthScreen() {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password: values.password,
+        options: { captchaToken },
       });
 
       if (error) throw error;
@@ -146,6 +157,9 @@ function AuthScreen() {
       setErrorMessage(error.message || "Ushbu ma'lumotlar bilan kirib bo'lmadi.");
     } finally {
       setSubmitting(false);
+      // Always reset captcha after an attempt so a fresh token is required
+      captchaRef.current?.resetCaptcha();
+      setCaptchaToken("");
     }
   };
 
@@ -165,6 +179,7 @@ function AuthScreen() {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin,
+        captchaToken,
       });
 
       if (error) throw error;
@@ -297,14 +312,27 @@ function AuthScreen() {
                 />
               </Form.Item>
 
+              {/* hCaptcha widget — token is required before login */}
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={HCAPTCHA_SITE_KEY}
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onExpire={() => setCaptchaToken("")}
+                  onError={() => setCaptchaToken("")}
+                  theme="light"
+                />
+              </div>
+
               <Space direction="vertical" size={10} style={{ width: "100%" }}>
                 <Button
                   type="primary"
                   htmlType="submit"
                   loading={submitting}
+                  disabled={!captchaToken}
                   size="large"
                   block
-                  style={styles.primaryButton}
+                  style={!captchaToken ? { ...styles.primaryButton, opacity: 0.55 } : styles.primaryButton}
                 >
                   Kirish
                 </Button>
