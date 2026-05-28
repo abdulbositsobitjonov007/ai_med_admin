@@ -88,9 +88,14 @@ body {
 
 /* Highlight supervised table rows */
 .admin-table-row-supervised > td {
-  background-color: #fefce8 !important;
+  background: #fef3c7 !important;
+  border-top: 1px solid #fde68a !important;
+  border-bottom: 1px solid #fde68a !important;
+}
+.admin-table-row-supervised > td:first-child {
+  border-left: 4px solid #f59e0b !important;
 }
 .admin-table-row-supervised:hover > td {
-  background-color: #fef9c3 !important;
+  background: #fde68a !important;
 }
 

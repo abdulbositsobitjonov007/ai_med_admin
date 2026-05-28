@@ -41,7 +41,6 @@ import {
   Search,
   ShieldCheck,
   Stethoscope,
-  Users,
   UserCheck,
   UserRound,
   Wind,
@@ -911,7 +910,7 @@ const DetailDrawer = ({
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         {/* Meta tags: date, condition, language, status */}
         <Card bordered={false} style={{ borderRadius: 18 }}>
-          <Space wrap size={[10, 10]}>
+          <Space wrap size={[8, 8]}>
             <Tag style={metaTagStyle}>
               <Clock3 size={13} />
               {formatDate(record.created_at, locale)}
@@ -923,17 +922,28 @@ const DetailDrawer = ({
             </Tag>
             <StatusBadge status={status} label={translatedStatusLabel} />
             {isSupervised && (
-              <Tag
+              <div
                 style={{
-                  ...metaTagStyle,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 10px 5px 8px",
+                  borderRadius: 999,
                   background: "#fffbeb",
-                  border: "1px solid #fde68a",
+                  border: "1.5px solid #fcd34d",
                   color: "#92400e",
+                  fontSize: 12,
+                  fontWeight: 700,
                 }}
               >
-                <UserCheck size={13} />
-                {text.supervisedBadge}
-              </Tag>
+                <UserCheck size={13} color="#d97706" />
+                <span>{record.supervised_by ? record.supervised_by.split("@")[0] : text.supervisedBadge}</span>
+                {record.supervised_at && (
+                  <span style={{ opacity: 0.65, fontWeight: 500, fontSize: 11 }}>
+                    · {formatDate(record.supervised_at, locale)}
+                  </span>
+                )}
+              </div>
             )}
           </Space>
         </Card>
@@ -1032,10 +1042,10 @@ const DetailDrawer = ({
                   borderRadius: 12,
                   height: 44,
                   fontWeight: 700,
-                  background: isSupervised ? "#fffbeb" : "#fff",
-                  borderColor: isSupervised ? "#fde68a" : "#e2e8f0",
-                  color: isSupervised ? "#92400e" : "#475569",
-                  boxShadow: isSupervised ? "0 4px 12px rgba(217,119,6,0.14)" : "none",
+                  background: isSupervised ? "linear-gradient(135deg, #f59e0b, #d97706)" : "#fff",
+                  borderColor: isSupervised ? "transparent" : "#e2e8f0",
+                  color: isSupervised ? "#fff" : "#475569",
+                  boxShadow: isSupervised ? "0 4px 16px rgba(245, 158, 11, 0.25)" : "none",
                 }}
               >
                 {text.underSupervision}
@@ -1338,7 +1348,8 @@ const HistoryDrawer = ({ open, onClose, history, text, statusLabels, locale, isM
 // ============================================================================
 export default function AdminPanel({ user, onSignOut }) {
   const screens = useBreakpoint();
-  const isMobile = !screens.lg;
+  const isMobile = !screens.md;
+  const isCollapsed = screens.md && !screens.xl;  // tablet: icon-only rail
   const isTablet = screens.lg && !screens.xxl;
   const [uiLanguage, setUiLanguage] = useState("uz");
   const [data, setData] = useState([]);
@@ -1353,7 +1364,6 @@ export default function AdminPanel({ user, onSignOut }) {
   const [selectedNurse, setSelectedNurse] = useState(null);
   const [nurseProfileOpen, setNurseProfileOpen] = useState(false);
   const [usingMockData, setUsingMockData] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [api, contextHolder] = notification.useNotification();
   const lastCriticalAlertCount = useRef(0);
   // New: supervision & history & mobile sidebar state
@@ -1392,6 +1402,11 @@ export default function AdminPanel({ user, onSignOut }) {
   const handleToggleSupervision = useCallback(async (id) => {
     const currentlySupervised = supervisedIds.has(id);
     const nextValue = !currentlySupervised;
+    const currentRecord = data.find((r) => r.id === id);
+    const previousSupervisedBy = currentRecord?.supervised_by || null;
+    const previousSupervisedAt = currentRecord?.supervised_at || null;
+    const supervisedBy = nextValue ? user?.email || null : null;
+    const supervisedAt = nextValue ? new Date().toISOString() : null;
 
     setSupervisedIds((prev) => {
       const next = new Set(prev);
@@ -1407,6 +1422,8 @@ export default function AdminPanel({ user, onSignOut }) {
           ? {
               ...record,
               is_supervised: nextValue,
+              supervised_by: supervisedBy,
+              supervised_at: supervisedAt,
             }
           : record,
       ),
@@ -1437,6 +1454,8 @@ export default function AdminPanel({ user, onSignOut }) {
             ? {
                 ...record,
                 is_supervised: currentlySupervised,
+                supervised_by: previousSupervisedBy,
+                supervised_at: previousSupervisedAt,
               }
             : record,
         ),
@@ -1448,7 +1467,7 @@ export default function AdminPanel({ user, onSignOut }) {
         placement: "topRight",
       });
     }
-  }, [supervisedIds, usingMockData, user, api]);
+  }, [supervisedIds, usingMockData, user, api, data]);
 
   const handleMarkChecked = useCallback((record) => {
     setConfirmingRecord(record);
@@ -1525,7 +1544,6 @@ export default function AdminPanel({ user, onSignOut }) {
       if (!isSupabaseConfigured) {
         setData(MOCK_SUBMISSIONS.map(sanitizeRecord));
         setUsingMockData(true);
-        setLastUpdated(new Date().toISOString());
         return;
       }
 
@@ -1555,11 +1573,9 @@ export default function AdminPanel({ user, onSignOut }) {
       }
       
       setUsingMockData(false);
-      setLastUpdated(new Date().toISOString());
     } catch (error) {
       setData(MOCK_SUBMISSIONS.map(sanitizeRecord));
       setUsingMockData(true);
-      setLastUpdated(new Date().toISOString());
       api.error({
         message: text.couldNotLoad,
         description: sanitizeText(error?.message || text.demoFallback, 220),
@@ -1579,12 +1595,20 @@ export default function AdminPanel({ user, onSignOut }) {
     () =>
       data.filter((record) => {
         if (filterCondition && record.condition_key !== filterCondition) return false;
-        if (filterStatus && record.result_data?.color !== filterStatus) return false;
+        
+        if (filterStatus) {
+          if (filterStatus === "SUPERVISED") {
+            if (!supervisedIds.has(record.id)) return false;
+          } else if (record.result_data?.color !== filterStatus) {
+            return false;
+          }
+        }
+
         if (filterLanguage && record.language !== filterLanguage) return false;
         if (!matchesSearch(record, query)) return false;
         return true;
       }),
-    [data, filterCondition, filterLanguage, filterStatus, query],
+    [data, filterCondition, filterLanguage, filterStatus, query, supervisedIds],
   );
 
   const stats = useMemo(
@@ -1751,7 +1775,8 @@ export default function AdminPanel({ user, onSignOut }) {
   const tableScrollX = isMobile ? undefined : 980;
 
   const renderSidebarContent = () => (
-    <Space direction="vertical" size={18} style={{ width: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "space-between" }}>
+      <Space direction="vertical" size={18} style={{ width: "100%" }}>
                 <div>
                   <Space size={12} align="start">
                     <div style={pageStyles.sidebarIcon}>
@@ -1795,7 +1820,10 @@ export default function AdminPanel({ user, onSignOut }) {
                             style={{
                               color: "#0f172a",
                               fontWeight: 700,
-                              wordBreak: "break-word",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: 160,
                             }}
                           >
                             {sanitizeText(user?.email || "Admin", 120)}
@@ -1821,73 +1849,28 @@ export default function AdminPanel({ user, onSignOut }) {
                   </button>
                 </div>
 
-                <div style={sidebarSectionStyle}>
-                  <Card
-                    bordered={false}
-                    style={sidebarSecondaryCardStyle}
-                    styles={{ body: { padding: 14 } }}
-                  >
-                    <Space direction="vertical" size={10} style={{ width: "100%" }}>
-                      <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                        <Text strong style={{ color: "#0f172a" }}>
-                          {text.nurseDirectory}
-                        </Text>
-                        <Users size={16} color="#0f766e" />
-                      </Space>
-                      <Text style={{ color: "#64748b" }}>{text.nurseDirectoryText}</Text>
-                      <Button
-                        onClick={() => setDirectoryOpen(true)}
-                        style={{ borderRadius: 12, width: "100%", fontWeight: 700 }}
-                      >
-                        {text.openDirectory}
-                      </Button>
-                    </Space>
-                  </Card>
-                </div>
 
-                <div style={sidebarSectionStyle}>
-                  <Text style={sidebarLabelStyle}>
-                    {text.tableLabel}: <Text strong>{supabaseTable}</Text>
-                  </Text>
-                  <Text style={sidebarLabelStyle}>
-                    {text.lastSync}: {lastUpdated ? formatDate(lastUpdated, uiLanguage) : text.waitingSync}
-                  </Text>
-                </div>
 
                 <div style={sidebarSectionStyle}>
                   <Text style={{ ...sidebarLabelStyle, display: "block", marginBottom: 8 }}>
                     {text.languageSwitcher}
                   </Text>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: isMobile
-                        ? "1fr"
-                        : "repeat(3, minmax(0, 1fr))",
-                      gap: 8,
-                    }}
+                  <Select
+                    value={uiLanguage}
+                    onChange={setUiLanguage}
+                    style={{ width: "100%" }}
                   >
                     {UI_LANGUAGE_OPTIONS.map((option) => (
-                      <Button
-                        key={option.value}
-                        type={uiLanguage === option.value ? "primary" : "default"}
-                        onClick={() => setUiLanguage(option.value)}
-                        style={{
-                          borderRadius: 12,
-                          fontWeight: 700,
-                          minHeight: 40,
-                          paddingInline: isMobile ? 8 : 12,
-                          whiteSpace: "normal",
-                        }}
-                      >
+                      <Select.Option key={option.value} value={option.value}>
                         {option.label}
-                      </Button>
+                      </Select.Option>
                     ))}
-                  </div>
+                  </Select>
                 </div>
+      </Space>
 
-                <div style={sidebarSectionStyle}>
-                  <Space size={10} direction="vertical" style={{ width: "100%" }}>
+      <div style={{ paddingBottom: isMobile ? 24 : 0 }}>
+        <Space size={10} direction="vertical" style={{ width: "100%" }}>
                     <Button
                       icon={<History size={14} />}
                       onClick={() => setHistoryOpen(true)}
@@ -1936,8 +1919,8 @@ export default function AdminPanel({ user, onSignOut }) {
                       {text.signOut}
                     </Button>
                   </Space>
-                </div>
-    </Space>
+      </div>
+    </div>
   );
 
   return (
@@ -1966,34 +1949,43 @@ export default function AdminPanel({ user, onSignOut }) {
           style={{
             ...pageStyles.container,
             width: isMobile ? "calc(100% - 16px)" : pageStyles.container.width,
-            padding: isMobile ? "12px 0 20px" : "22px 0 28px",
+            padding: isMobile ? "12px 0 20px" : "32px 0 28px",
           }}
         >
           <div
             style={{
-              // Use block on mobile so main content is full screen width,
-              // and standard 2-col wrapper on desktop.
-              display: isMobile ? "block" : "grid",
-              gridTemplateColumns: isMobile ? undefined : "320px minmax(0, 1fr)",
-              gap: 18,
-              alignItems: "start",
+              display: isMobile ? "block" : "flex",
+              gap: 0,
             }}
           >
+            {/* Invisible spacer matching the fixed sidebar width */}
+            {!isMobile && <div style={{ width: isCollapsed ? 220 : 280, flexShrink: 0, transition: "width 0.22s ease" }} />}
             {!isMobile && (
-              <Card
-                bordered={false}
+              <div
                 style={{
-                  ...pageStyles.sidebarCard,
-                  position: "sticky",
-                  top: 18,
+                  position: "fixed",
+                  top: 0,
+                  left: 0,
+                  width: isCollapsed ? 220 : 280,
+                  height: "100vh",
+                  zIndex: 100,
+                  padding: isCollapsed ? "14px 12px" : "18px 16px",
+                  background: "rgba(255,255,255,0.97)",
+                  backdropFilter: "blur(14px)",
+                  borderRight: "1px solid #e2e8f0",
+                  boxShadow: "4px 0 24px rgba(15,23,42,0.06)",
+                  display: "flex",
+                  flexDirection: "column",
+                  overflowY: "auto",
+                  overflowX: "hidden",
+                  transition: "width 0.22s ease, padding 0.22s ease",
                 }}
-                styles={{ body: { padding: 18 } }}
               >
                 {renderSidebarContent()}
-              </Card>
+              </div>
             )}
 
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <Card
                 bordered={false}
                 style={pageStyles.heroCard}
@@ -2051,26 +2043,29 @@ export default function AdminPanel({ user, onSignOut }) {
                       style={{
                         ...pageStyles.heroText,
                         fontSize: isMobile ? 14 : 15,
+                        display: isMobile ? "none" : undefined,
                       }}
                     >
                       {text.compactText}
                     </Text>
                   </div>
 
-                  <Space wrap size={[8, 8]}>
-                    <Tag style={pageStyles.heroPill}>
-                      <ShieldCheck size={14} />
-                      {text.secureLogin}
-                    </Tag>
-                    <Tag style={pageStyles.heroPill}>
-                      <RefreshCw size={14} />
-                      {text.liveRefresh}
-                    </Tag>
-                    <Tag style={pageStyles.heroPill}>
-                      <Filter size={14} />
-                      {text.fastTriage}
-                    </Tag>
-                  </Space>
+                  {!isMobile && (
+                    <Space wrap size={[8, 8]}>
+                      <Tag style={pageStyles.heroPill}>
+                        <ShieldCheck size={14} />
+                        {text.secureLogin}
+                      </Tag>
+                      <Tag style={pageStyles.heroPill}>
+                        <RefreshCw size={14} />
+                        {text.liveRefresh}
+                      </Tag>
+                      <Tag style={pageStyles.heroPill}>
+                        <Filter size={14} />
+                        {text.fastTriage}
+                      </Tag>
+                    </Space>
+                  )}
                 </div>
               </Card>
 
@@ -2084,54 +2079,136 @@ export default function AdminPanel({ user, onSignOut }) {
                 />
               )}
 
-              {stats.red > 0 && (
-                <Card
-                  bordered={false}
-                  style={pageStyles.alertCard}
-                  styles={{ body: { padding: isMobile ? 14 : 16 } }}
+              {(stats.red > 0 || supervisedIds.size > 0) && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "1fr" : (stats.red > 0 && supervisedIds.size > 0) ? "1fr 1fr" : "1fr",
+                    gap: 16,
+                    alignItems: "stretch",
+                    marginTop: 24,
+                  }}
                 >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: isMobile ? "1fr" : "1fr auto",
-                      gap: 12,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Space align="start" size={12}>
-                      <div style={pageStyles.alertIcon}>
-                        <AlertTriangle size={18} />
-                      </div>
-                      <div>
-                        <Text style={{ color: "#991b1b", fontWeight: 800, fontSize: 12 }}>
-                          {text.urgentQueue}
-                        </Text>
-                        <div
-                          style={{
-                            fontSize: isMobile ? 22 : 26,
-                            lineHeight: 1.1,
-                            color: "#7f1d1d",
-                            fontWeight: 800,
-                            margin: "4px 0 4px",
-                          }}
-                        >
-                          {stats.red} {text.criticalCases.toLowerCase()}
-                        </div>
-                        <Text style={{ color: "#7f1d1d" }}>{text.urgentText}</Text>
-                      </div>
-                    </Space>
-
-                    <Button
-                      type="primary"
-                      danger
-                      size={isMobile ? "middle" : "large"}
+                  {stats.red > 0 && (
+                    <Card
+                      bordered={false}
                       onClick={() => applyStatusFilter("RED")}
-                      style={{ borderRadius: 14, minWidth: isMobile ? "100%" : 230 }}
+                      style={{
+                        margin: 0,
+                        height: "100%",
+                        cursor: "pointer",
+                        borderRadius: 20,
+                        background: "linear-gradient(135deg, #fef2f2, #fee2e2)",
+                        border: "1px solid #fecaca",
+                        boxShadow: "0 4px 12px rgba(220, 38, 38, 0.08)",
+                        transition: "all 0.2s ease",
+                      }}
+                      styles={{ body: { padding: isMobile ? 14 : 16, height: "100%" } }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = "translateY(-2px)";
+                        e.currentTarget.style.boxShadow = "0 8px 16px rgba(220, 38, 38, 0.12)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(220, 38, 38, 0.08)";
+                      }}
                     >
-                      {text.reviewCritical}
-                    </Button>
-                  </div>
-                </Card>
+                      <div style={{ display: "flex", flexDirection: "row", gap: 10, alignItems: "center", justifyContent: "space-between", height: "100%" }}>
+                        <Space align="center" size={12}>
+                          <div
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: 10,
+                              background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                              boxShadow: "0 4px 10px rgba(220, 38, 38, 0.2)",
+                            }}
+                          >
+                            <AlertTriangle size={18} color="#fff" />
+                          </div>
+                          <div>
+                            <Text style={{ color: "#991b1b", fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                              {text.urgentQueue}
+                            </Text>
+                            <div style={{ fontSize: isMobile ? 16 : 24, lineHeight: 1.1, color: "#7f1d1d", fontWeight: 800, margin: "2px 0" }}>
+                              {stats.red} {text.criticalCases.toLowerCase()}
+                            </div>
+                            {!isMobile && (
+                              <Text style={{ color: "#991b1b", fontSize: 13, opacity: 0.8 }}>
+                                {text.urgentText}
+                              </Text>
+                            )}
+                          </div>
+                        </Space>
+                        <ChevronRight size={20} color="#dc2626" style={{ opacity: 0.6 }} />
+                      </div>
+                    </Card>
+                  )}
+
+                  {supervisedIds.size > 0 && (
+                    <Card
+                      bordered={false}
+                      onClick={() => applyStatusFilter("SUPERVISED")}
+                      style={{
+                        margin: 0,
+                        height: "100%",
+                        cursor: "pointer",
+                        borderRadius: 20,
+                        background: "linear-gradient(135deg, #fffbeb, #fef3c7)",
+                        border: "1px solid #fde68a",
+                        boxShadow: "0 4px 12px rgba(245, 158, 11, 0.08)",
+                        transition: "all 0.2s ease",
+                      }}
+                      styles={{ body: { padding: isMobile ? 14 : 16, height: "100%" } }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = "translateY(-2px)";
+                        e.currentTarget.style.boxShadow = "0 8px 16px rgba(245, 158, 11, 0.12)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(245, 158, 11, 0.08)";
+                      }}
+                    >
+                      <div style={{ display: "flex", flexDirection: "row", gap: 10, alignItems: "center", justifyContent: "space-between", height: "100%" }}>
+                        <Space align="center" size={12}>
+                          <div
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: 10,
+                              background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                              boxShadow: "0 4px 10px rgba(217, 119, 6, 0.2)",
+                            }}
+                          >
+                            <UserCheck size={18} color="#fff" />
+                          </div>
+                          <div>
+                            <Text style={{ color: "#92400e", fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                              {text.supervisedBadge || "NAZORAT OSTIDA"}
+                            </Text>
+                            <div style={{ fontSize: isMobile ? 16 : 24, lineHeight: 1.1, color: "#78350f", fontWeight: 800, margin: "2px 0" }}>
+                              {supervisedIds.size} {text.patientsUnderSupervision || "bemor"}
+                            </div>
+                            {!isMobile && (
+                              <Text style={{ color: "#a16207", fontSize: 13, opacity: 0.9 }}>
+                                {text.supervisedDescription || "Doimiy kuzatuvdagi bemorlar"}
+                              </Text>
+                            )}
+                          </div>
+                        </Space>
+                        <ChevronRight size={20} color="#d97706" style={{ opacity: 0.6 }} />
+                      </div>
+                    </Card>
+                  )}
+                </div>
               )}
 
               <Row gutter={[16, 16]} style={{ marginTop: 16, marginBottom: 16 }}>
@@ -2266,6 +2343,12 @@ export default function AdminPanel({ user, onSignOut }) {
                           {statusLabels[key]}
                         </Select.Option>
                       ))}
+                      <Select.Option value="SUPERVISED">
+                        <Space size={6}>
+                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} />
+                          {text.underSupervision || "Under Supervision"}
+                        </Space>
+                      </Select.Option>
                     </Select>
                     <Select
                       allowClear
@@ -2544,11 +2627,7 @@ const sidebarUserButtonStyle = {
   textAlign: "left",
 };
 
-const sidebarSecondaryCardStyle = {
-  borderRadius: 16,
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-};
+
 
 const activeFilterTagStyle = {
   borderRadius: 999,
@@ -2597,7 +2676,6 @@ const pageStyles = {
     minHeight: "100vh",
     background: "#f8fafc",
     position: "relative",
-    overflow: "hidden",
   },
   gradient: {
     position: "absolute",
