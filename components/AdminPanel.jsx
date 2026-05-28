@@ -1389,17 +1389,66 @@ export default function AdminPanel({ user, onSignOut }) {
     scrollToTable();
   }, []);
 
-  const handleToggleSupervision = useCallback((id) => {
+  const handleToggleSupervision = useCallback(async (id) => {
+    const currentlySupervised = supervisedIds.has(id);
+    const nextValue = !currentlySupervised;
+
     setSupervisedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (nextValue) next.add(id);
+      else next.delete(id);
       return next;
     });
-  }, []);
+
+    // Update 'data' to change the record reference so Ant Design Table re-renders the row
+    setData((prev) =>
+      prev.map((record) =>
+        record.id === id
+          ? {
+              ...record,
+              is_supervised: nextValue,
+            }
+          : record,
+      ),
+    );
+
+    if (!isSupabaseConfigured || usingMockData) return;
+
+    const { error } = await supabase
+      .from(supabaseTable)
+      .update({
+        is_supervised: nextValue,
+        supervised_at: nextValue ? new Date().toISOString() : null,
+        supervised_by: nextValue ? user?.email || null : null,
+      })
+      .eq("id", id);
+
+    if (error) {
+      setSupervisedIds((prev) => {
+        const next = new Set(prev);
+        if (currentlySupervised) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+
+      setData((prev) =>
+        prev.map((record) =>
+          record.id === id
+            ? {
+                ...record,
+                is_supervised: currentlySupervised,
+              }
+            : record,
+        ),
+      );
+
+      api.error({
+        message: "Action failed",
+        description: error.message,
+        placement: "topRight",
+      });
+    }
+  }, [supervisedIds, usingMockData, user, api]);
 
   const handleMarkChecked = useCallback((record) => {
     setConfirmingRecord(record);
@@ -1488,7 +1537,9 @@ export default function AdminPanel({ user, onSignOut }) {
       if (submissionsResponse.error) throw submissionsResponse.error;
       // We don't throw on historyResponse.error because the table might not exist yet
 
-      setData((submissionsResponse.data || []).map(sanitizeRecord));
+      const submissions = (submissionsResponse.data || []).map(sanitizeRecord);
+      setData(submissions);
+      setSupervisedIds(new Set(submissions.filter((r) => r.is_supervised).map((r) => r.id)));
       
       if (!historyResponse.error) {
          const mappedHistory = (historyResponse.data || []).map(h => ({

@@ -85,3 +85,12 @@ body {
     font-size: 22px !important;
   }
 }
+
+/* Highlight supervised table rows */
+.admin-table-row-supervised > td {
+  background-color: #fefce8 !important;
+}
+.admin-table-row-supervised:hover > td {
+  background-color: #fef9c3 !important;
+}
+

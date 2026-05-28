@@ -111,6 +111,16 @@ function SetupScreen() {
 // ============================================================================
 const HCAPTCHA_SITE_KEY = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
 
+const getAuthErrorMessage = (error, fallbackMessage) => {
+  const message = error?.message || "";
+
+  if (message === "Failed to fetch" || message.includes("fetch")) {
+    return `Supabase serveriga ulanib bo'lmadi. .env ichidagi VITE_SUPABASE_URL ni tekshiring: ${supabaseUrl || "kiritilmagan"}. Loyiha URL noto'g'ri, o'chirilgan yoki vaqtincha ishlamayotgan bo'lishi mumkin.`;
+  }
+
+  return message || fallbackMessage;
+};
+
 function AuthScreen() {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
@@ -154,7 +164,7 @@ function AuthScreen() {
         placement: "topRight",
       });
     } catch (error) {
-      setErrorMessage(error.message || "Ushbu ma'lumotlar bilan kirib bo'lmadi.");
+      setErrorMessage(getAuthErrorMessage(error, "Ushbu ma'lumotlar bilan kirib bo'lmadi."));
     } finally {
       setSubmitting(false);
       // Always reset captcha after an attempt so a fresh token is required
@@ -190,7 +200,7 @@ function AuthScreen() {
         placement: "topRight",
       });
     } catch (error) {
-      setErrorMessage(error.message || "Tiklash uchun elektron pochta yuborib bo'lmadi.");
+      setErrorMessage(getAuthErrorMessage(error, "Tiklash uchun elektron pochta yuborib bo'lmadi."));
     } finally {
       setResetting(false);
     }
